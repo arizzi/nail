@@ -2,7 +2,7 @@ from nail import *
 import ROOT
 f=ROOT.TFile.Open("/gpfs/ddn/cms/user/mandorli/Hmumu/CMSSW_9_4_6/src/Skim0/fileSkim2016/VBF_HToMuMu_nano2016.root")
 e=f.Get("Events")
-allbranches=[x.GetName() for x in e.GetListOfBranches()]
+allbranches=[(x.GetName(),x.GetListOfLeaves()[0].GetTypeName()) for x in e.GetListOfBranches()]
 
 flow=SampleProcessing("",allbranches)
 #flow=SampleProcessing("",["Muon_pt","Muon_eta","Muon_phi","Muon_tightId","Muon_looseId","Jet_pt","Muon_iso","Jet_muonIdx1","Jet_eta","Jet_phi","Jet_mass"])
@@ -14,15 +14,15 @@ flow.Define("Muon_mass","0.106+0*Muon_pt") #ensure same lenght of Muon_pt
 flow.Define("Muon_id","Muon_tightId*3+Muon_mediumId") 
 flow.Define("Muon_iso","Muon_miniPFRelIso_all")
 flow.SubCollection("SelectedMuon","Muon",sel="Muon_iso < muIsoCut && Muon_id > muIdCut && Muon_pt > muPtCut") 
-flow.Filter("twoOppositeSignMuons","SelectedMuon.size()==2 && SelectedMuon_charge[0]*SelectedMuon_charge[1] < 0")
+flow.Filter("twoOppositeSignMuons","nSelectedMuon>=2 && SelectedMuon_charge[0]*SelectedMuon_charge[1] < 0")
 flow.Define("Higgs","@p4(SelectedMuon)[0]+@p4(SelectedMuon)[1]",requires=["twoOppositeSignMuons"]) 
 
 
 
 #VBF Jets kinematics
 flow.DefaultConfig(jetPtCut=25)
-flow.SubCollection("SelectedJet","Jet","Jet_pt > jetPtCut && (Jet_muonIdx1 == -1 || Muon_iso[Jet_muonIdx1] > muIsoCut || Muon_id[Jet_muonIdx1] > 0")
-flow.Filter("twoJets","SelectedJet.size()>=2")
+flow.SubCollection("SelectedJet","Jet","Jet_pt > jetPtCut && (Jet_muonIdx1 == -1 || Muon_iso[Jet_muonIdx1] > muIsoCut || Muon_id[Jet_muonIdx1] > 0)")
+flow.Filter("twoJets","nSelectedJet>=2")
 flow.Define("Qjet1","@p4(SelectedJet)[0]",requires=["twoJets"])
 flow.Define("Qjet2","@p4(SelectedJet)[1]",requires=["twoJets"])
 flow.Define("qq","Qjet1+Qjet2")
@@ -51,7 +51,7 @@ flow.Filter("SignalRegion","VBFRegion && MassWindow")
 #flow.Trainable("SBClassifier","evalMVA",["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"],splitMode="TripleMVA",requires="VBFRegion") 
 flow.Define("Higgs_pt","Higgs.Pt()")
 flow.Define("Higgs_m","Higgs.M()")
-flow.Define("SBClassifier","evalMVA",inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
+flow.Define("SBClassifier","1.0",inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
 
 
 #Define Systematic variations

@@ -24,12 +24,18 @@ class SampleProcessing:
 	self.syst={}
 	self.conf={}
 	self.regexps=[]
-	self.validCols=cols
-	for c in cols:
+	self.validCols=[x[0] for x in cols]
+	self.inputTypes={x[0]:x[1] for x in cols}
+#	print self.inputTypes
+	for c,t in cols:
 	    self.inputs[c]=[]
 	    self.selections[c]=[]
-	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_]+)\]","ROOT::Math::PtEtaPhiMVector(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
-	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::PtEtaPhiMVector(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
+	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_]+)\]","makeP4(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
+	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","makeP4(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
+	print 'TLorentzVector makeP4(float pt,float eta,float phi,float m) { TLorentzVector r; r.SetPtEtaPhiM(pt,eta,phi,m); return r;}'
+
+#	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_]+)\]","ROOT::Math::PtEtaPhiMVector(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
+#	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::PtEtaPhiMVector(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
 
     def AddCodeRegex(self,regexp):
 	self.regexps.append(regexp)
@@ -44,7 +50,11 @@ class SampleProcessing:
 	l=len(existing)
 	additionalCols= [ (name+c[l:],c) for c in self.validCols  if c[0:l+1]==existing+"_" ]
 	for (ac,oc) in additionalCols :	
-	   self.Define(ac,"%s[%s]"%(oc,name))
+	   if oc in self.inputTypes and self.inputTypes[oc] =='Bool_t' :
+	       self.Define(ac,"(1*%s)[%s]"%(oc,name)) #FIX RDF BUG
+	   else:
+	       self.Define(ac,"%s[%s]"%(oc,name))
+	self.Define("n%s"%name,"Sum(%s)"%(name))
 
     def Define(self,name,code,inputs=[],requires=[]):
 	if name not in self.validCols :
@@ -101,30 +111,14 @@ class SampleProcessing:
 	return code
 
     def printRDF(self):
-	print 'ROOT::RDataFrame toplevel_("Events","/gpfs/ddn/cms/user/mandorli/Hmumu/CMSSW_9_4_6/src/Skim0/fileSkim2016/VBF_HToMuMu_nano2016.root");'
-#print "ROOT::RDataFrame d(treeName, fileName);"
-	definedSels=["toplevel"]
-	last={"toplevel":"toplevel"}
+	print 'ROOT::RDataFrame rdf("Events","/gpfs/ddn/cms/user/mandorli/Hmumu/CMSSW_9_4_6/src/Skim0/fileSkim2016/VBF_HToMuMu_nano2016.root");'
+	print "auto toplevel ="
+	rdf="rdf"
 	for c in self.validCols:
-	    if(len(self.selections[c])==0):
-		rdf="toplevel";
-	    else :
-   		rdf="_".join(sorted(self.selections[c]))
-	    if rdf not in definedSels:
-		print "\nauto node_%s=toplevel"%rdf
-		for f in sorted(self.selections[c]) :
-		    print '.Filter("%s","%s")'%(f,self.code[f])
-		print ";"
-	    	definedSels.append(rdf)
-		last[rdf]=rdf
-	    if c in self.obs:
-		print 'auto node_%s=node_%s.Define("%s","%s");'%(c,last[rdf],c,self.code[c])
-		last[rdf]=c
-	    if c in self.filters:
-		print '\nauto node_%s=node_%s.Filter("%s","%s");'%(c,last[rdf],c,self.code[c])
-		last[c]=c
-	    	definedSels.append(c)
-
+	    if c in self.obs or c in self.filters :
+	        print '%s.Define("%s","%s")'%(rdf,c,self.code[c])
+		rdf=""
+	print ";"
 
 
     def baseInputs(self,x) :
