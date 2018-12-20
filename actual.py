@@ -57,15 +57,39 @@ flow.Define("SBClassifier","1.0",inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","Delta
 #Define Systematic variations
 flow.Define("Muon_pt_scaleUp","Muon_pt*1.01")
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
+flow.createSystematicBranch("MuScaleUp","SBClassifier")
 
 
 #print "list of vars to update with MuScaleUp"
-print flow.findAffectedNodesForSystematicOnTarget("MuScaleUp","SBClassifier")
-flow.createSystematicBranch("MuScaleUp","SBClassifier")
+if 1:
+  import networkx as nx
+  nodes=set(flow.findAffectedNodesForSystematicOnTarget("MuScaleUp","SBClassifier")+["Muon_pt"])
+  G = nx.DiGraph()
+  for k in flow.inputs :
+   if k in nodes:
+    G.add_node(k)
+  for k in flow.inputs :
+    for i in flow.inputs[k] :
+      if k in nodes and i in nodes :
+       G.add_edge(k,i)
 
-flow.printRDF()
+  import matplotlib.pyplot as plt
+  plt.subplot(121)
+  nx.draw_networkx(G, with_labels=True, font_weight='bold')
+  plt.show()
+
+
+#flow.printRDF()
+
 
 import networkx as nx
+if 0:
+  print "digraph {"
+  for k in flow.inputs :
+    for i in flow.inputs[k] :
+       print k,"->",i,";"
+  print "}"
+
 if 0 :
   G = nx.DiGraph()
   for k in flow.inputs :
