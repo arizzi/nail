@@ -23,6 +23,7 @@ class SampleProcessing:
         self.selections={} 
 	self.syst={}
 	self.conf={}
+	self.histos={}
 	self.regexps=[]
 	self.validCols=[x[0] for x in cols]
 	self.inputTypes={x[0]:x[1] for x in cols}
@@ -84,6 +85,9 @@ class SampleProcessing:
 	self.syst[name]={}
         self.syst[name]["original"]=original
         self.syst[name]["modified"]=modified
+
+    def Histo(self,name,binHint=None):
+	self.histos[name]={}
 
 	
 
@@ -148,26 +152,27 @@ class SampleProcessing:
 
     def findAffectedNodesForSystematicOnTarget(self,name,target):
 	 return [x for x in self.allNodesFrom(self.syst[name]["original"]) if x in self.allNodesTo(target)]
-    
+   
     def createSystematicBranch(self,name,target):
-	 affected=(self.findAffectedNodesForSystematicOnTarget(name,target))
-	 for x in affected:
-	     x_syst=x+"__syst__"+name
-	     if x in self.obs:
-		 selections=[]
-		 for s in self.selections[x] :
-		     if s in affected :	
-			selections.append(s+"__syst__"+name)
-		     else :
-			selections.append(s)
-	         self.Define(x_syst,self.code[x],requires=selections) 
-	     if x in self.filters:
-	         self.Filter(x_syst,self.code[x]) 
-                 
-	     #FIXME: not clear what to do here, the code should be the same just bound to different inputs...so:
-	     #  - clone the code?
-             #  - provide translation table?
-	     # should also adjust the "requires" and detect filter vs define	
+         affected=(self.findAffectedNodesForSystematicOnTarget(name,target))
+         replacementTable=[(x,x+"__syst__"+name) for x in affected]
+         for x,x_syst in replacementTable:
+
+             ncode=" "+self.code[x]+" "  #FIXME: we should avoid duplicating the code
+             for y,y_syst in replacementTable:
+	         regBound="([^a-zA-Z0-9_])"
+                 reg=regBound+y+regBound
+                 ncode=re.sub(reg,"\\1"+y_syst+"\\2",ncode)
+             if x in self.obs:
+                 selections=[]
+                 for s in self.selections[x] :
+                     if s in affected :
+                        selections.append(s+"__syst__"+name)
+                     else :
+                        selections.append(s)
+                 self.Define(x_syst,ncode,requires=selections)
+             if x in self.filters:
+                 self.Filter(x_syst,ncode)
 
 
 
@@ -184,8 +189,8 @@ class AnalysisYields:
 	self.fillers={}
 
 
-    def Histo(self,name,what,binHint=None):
-	pass
+
+    
 
 class Interperations:
     def __init__(self):
