@@ -15,9 +15,10 @@ flow.Define("Muon_id","Muon_tightId*3+Muon_mediumId")
 flow.Define("Muon_iso","Muon_miniPFRelIso_all")
 flow.SubCollection("SelectedMuon","Muon",sel="Muon_iso < muIsoCut && Muon_id > muIdCut && Muon_pt > muPtCut") 
 flow.Filter("twoOppositeSignMuons","nSelectedMuon>=2 && SelectedMuon_charge[0]*SelectedMuon_charge[1] < 0")
+#flow.Define("SelectedMuon_p4","@p4(SelectedMuon)")
 flow.Define("Higgs","@p4(SelectedMuon)[0]+@p4(SelectedMuon)[1]",requires=["twoOppositeSignMuons"]) 
-
-
+#flow.Combinations("JetPairs","Jets","Jets",filter="[](auto a,auto b){a != b}")
+#flow.Reduce("HighestPtPair","MaxArg(first(p4)+second(p4))")
 
 #VBF Jets kinematics
 flow.DefaultConfig(jetPtCut=25)
@@ -51,21 +52,19 @@ flow.Filter("SignalRegion","VBFRegion && MassWindow")
 #flow.Trainable("SBClassifier","evalMVA",["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"],splitMode="TripleMVA",requires="VBFRegion") 
 flow.Define("Higgs_pt","Higgs.Pt()")
 flow.Define("Higgs_m","Higgs.M()")
-flow.Define("SBClassifier","1.0",inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
+flow.Define("SBClassifier","Higgs_pt+Higgs_m+Mqq+Rpt+DeltaRelQQ",inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
 
 
 #Define Systematic variations
 flow.Define("Muon_pt_scaleUp","Muon_pt*1.01")
 flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
-
-#
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
 flow.createSystematicBranch("MuScaleUp","SBClassifier")
 flow.createSystematicBranch("MuScaleDown","SBClassifier")
 
-
+exit(1)
 import os
 class Analaysis:
     def __init__(self,flow,samples,store="analysis_store"):
@@ -99,7 +98,7 @@ from samples import *
 ana=Analysis(flow,samples)
 
 
-ana.ComparisonChi2(flow.inputs["SBClassifier"],["b","s"],"d" norm="area")
+ana.ComparisonChi2(flow.inputs["SBClassifier"],["b","s"],"d" ,norm="area")
 ana.ComparisonChi2(["SBClassifier"],["s+b","b"],"d", norm="xsec",systematics=[".*"])
 
 #interactive?

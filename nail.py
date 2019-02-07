@@ -115,11 +115,13 @@ class SampleProcessing:
 	    code=re.sub(s,r,code)
 	return code
 
-    def printRDF(self):
+    def printRDF(self,to):
 	print 'ROOT::RDataFrame rdf("Events","/gpfs/ddn/cms/user/mandorli/Hmumu/CMSSW_9_4_6/src/Skim0/fileSkim2016/VBF_HToMuMu_nano2016.root");'
 	print "auto toplevel ="
 	rdf="rdf"
+	toprint=set([x for t in to for x in self.allNodesTo(t)])
 	for c in self.validCols:
+           if c in toprint:
 	    if c in self.obs or c in self.filters :
 	        print '%s.Define("%s","%s")'%(rdf,c,self.code[c])
 		rdf=""
@@ -155,6 +157,7 @@ class SampleProcessing:
    
     def createSystematicBranch(self,name,target):
          affected=(self.findAffectedNodesForSystematicOnTarget(name,target))
+	 affected.sort(key=lambda x: self.validCols.index(x)) #keep original sorting
          replacementTable=[(x,x+"__syst__"+name) for x in affected]
          for x,x_syst in replacementTable:
 
