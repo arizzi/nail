@@ -22,7 +22,7 @@ flow.Define("Higgs","@p4(SelectedMuon)[0]+@p4(SelectedMuon)[1]",requires=["twoOp
 
 #VBF Jets kinematics
 flow.DefaultConfig(jetPtCut=25)
-flow.SubCollection("SelectedJet","Jet","Jet_pt > jetPtCut && (Jet_muonIdx1 == -1 || Muon_iso[Jet_muonIdx1] > muIsoCut || Muon_id[Jet_muonIdx1] > 0)")
+flow.SubCollection("SelectedJet","Jet","Jet_pt > jetPtCut && (Jet_muonIdx1 == -1 || Take(Muon_iso,Jet_muonIdx1) > muIsoCut || Take(Muon_id,Jet_muonIdx1) > 0)")
 flow.Filter("twoJets","nSelectedJet>=2")
 flow.Define("Qjet1","@p4(SelectedJet)[0]",requires=["twoJets"])
 flow.Define("Qjet2","@p4(SelectedJet)[1]",requires=["twoJets"])
@@ -63,6 +63,9 @@ flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacem
 
 flow.createSystematicBranch("MuScaleUp","SBClassifier")
 flow.createSystematicBranch("MuScaleDown","SBClassifier")
+
+#flow.printRDF(["Higgs_m","SBClassifier"])
+flow.printRDF(["Higgs_m","SBClassifier","SBClassifier__syst__MuScaleUp"])
 
 exit(1)
 import os

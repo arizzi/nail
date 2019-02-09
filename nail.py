@@ -116,16 +116,40 @@ class SampleProcessing:
 	return code
 
     def printRDF(self,to):
-	print 'ROOT::RDataFrame rdf("Events","/gpfs/ddn/cms/user/mandorli/Hmumu/CMSSW_9_4_6/src/Skim0/fileSkim2016/VBF_HToMuMu_nano2016.root");'
+	#print 'ROOT::RDataFrame rdf("Events","/gpfs/ddn/cms/user/mandorli/Hmumu/CMSSW_9_4_6/src/Skim0/fileSkim2016/VBF_HToMuMu_nano2016.root");'
+	print 'ROOT::RDataFrame rdf("Events","/dev/shm/VBF_HToMuMu_nano2016.root");'
 	print "auto toplevel ="
 	rdf="rdf"
+	allfilters=set([s for t in to for s in self.selections[t]])
+	allfiltersinputs=set([i for t in to for s in self.selections[t] for i in self.allNodesTo(s)])
+        filterstring="||".join( ["(%s)"%("&&".join(self.selections[t])) for t in to])
+      	orderedColumns=[x for x in self.validCols if x in allfiltersinputs] + [x for x in self.validCols if x not in allfiltersinputs]
+	commonfilters=set(self.selections[to[0]]) if len(to) > 0 else set()
+	for s in to[1:]:
+	    commonfilters.intersection_update(self.selections[s])
+	
+	#or t in to :
+	#  sels=self.selections[t]
+	#  filters.add('&&'.join(self.selections[t])
+	
 	toprint=set([x for t in to for x in self.allNodesTo(t)])
+	#for c in orderedColumns:
 	for c in self.validCols:
            if c in toprint:
 	    if c in self.obs or c in self.filters :
 	        print '%s.Define("%s","%s")'%(rdf,c,self.code[c])
+		if c in allfilters :
+			allfilters.remove(c)
+		if len(allfilters) == 0 and filterstring!="":
+			print '%s.Filter("%s")'%(rdf,filterstring)
+			filterstring=""
+		if c in commonfilters :
+		        print '%s.Filter("%s")'%(rdf,c)
+		
 		rdf=""
 	print ";"
+        for t in to :
+  	    print 'auto %s=toplevel.Filter("%s").Histo1D("%s");'%(t,'&&'.join(self.selections[t]),t)
 
 
     def baseInputs(self,x) :
