@@ -67,4 +67,90 @@ flow.createSystematicBranch("MuScaleDown","SBClassifier")
 #flow.printRDF(["Higgs_m","SBClassifier"])
 flow.printRDF(["Higgs_m","SBClassifier","SBClassifier__syst__MuScaleUp"])
 
+exit(1)
+import os
+class Analaysis:
+    def __init__(self,flow,samples,store="analysis_store"):
+	self.flow=flow
+	self.samples=samples
+	self.store=store
+	os.mkdir(store)
+	self.workers={}
+	
+    def clearActions():
+        pass    
+
+    def estimateTime():
+	pass
+
+    def run():
+	pass
+
+    def Draw(self,observables,samples,sampleref,normalization="area",systematics=[]) :
+	pass
+
+    def ComparisonChi2(self,observables,samples,sampleref,normalization="area",systematics=[]) :
+	flow.fetchHistos(observables,samples+[sampleref],normalization,systematics)
+
+    def fetchHistos(self,observables,samples,systematics=[]):	
+	for s in samples :
+	    w=self.getWorker(s)
+
+
+from samples import *
+ana=Analysis(flow,samples)
+
+
+ana.ComparisonChi2(flow.inputs["SBClassifier"],["b","s"],"d" ,norm="area")
+ana.ComparisonChi2(["SBClassifier"],["s+b","b"],"d", norm="xsec",systematics=[".*"])
+
+#interactive?
+#ana=Analysis(flow,samples)
+#ana.stateLoad()
+#ana.
+
+
+
+#print "list of vars to update with MuScaleUp"
+if 0:
+  import networkx as nx
+  nodes=set(flow.findAffectedNodesForSystematicOnTarget("MuScaleUp","SBClassifier")+["Muon_pt"])
+  G = nx.DiGraph()
+  for k in flow.inputs :
+   if k in nodes:
+    G.add_node(k)
+  for k in flow.inputs :
+    for i in flow.inputs[k] :
+      if k in nodes and i in nodes :
+       G.add_edge(k,i)
+
+  import matplotlib.pyplot as plt
+  plt.subplot(121)
+  nx.draw_networkx(G, with_labels=True, font_weight='bold')
+  plt.show()
+
+
+#flow.printRDF()
+
+
+import networkx as nx
+if 0:
+  print "digraph {"
+  for k in flow.inputs :
+    for i in flow.inputs[k] :
+       print k,"->",i,";"
+  print "}"
+
+if 0 :
+  G = nx.DiGraph()
+  for k in flow.inputs :
+    G.add_node(k)
+  for k in flow.inputs :
+    for i in flow.inputs[k] :
+       G.add_edge(k,i)
+ 
+  import matplotlib.pyplot as plt
+  plt.subplot(121)
+  nx.draw_networkx(G, with_labels=True, font_weight='bold')
+  plt.show()
 
