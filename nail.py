@@ -61,7 +61,18 @@ class SampleProcessing:
 	       self.Define(ac,"%s[%s]"%(oc,name))
 	self.Define("n%s"%name,"Sum(%s)"%(name))
 
-    def Distinct(self,name,collection) :
+    def SubCollectionFromIndices(self,name,existing,sel=""):
+        if sel!="":
+                self.Define(name,sel)
+        else :
+                sel=name
+        l=len(existing)
+        additionalCols= [ (name+c[l:],c) for c in self.validCols  if c[0:l+1]==existing+"_" ]
+        for (ac,oc) in additionalCols :
+            self.Define(ac,"Take(%s,%s)"%(oc,name))
+        self.Define("n%s"%name,"%s.size()"%(name))
+
+    def Distinct(self,name,collection,selection="") :
 	if collection not in self.validCols :
 	   if "n%s"%collection in self.validCols:
 		self.Define(collection,"RVec<bool>(n%s,true)"%collection)
@@ -72,8 +83,8 @@ class SampleProcessing:
 	self.Define(name,"%s_allpairs[0] > %s_allpairs[1]"%(name,name))
 	self.Define("%s0"%name,"%s_allpairs[0][%s]"%(name,name))
 	self.Define("%s1"%name,"%s_allpairs[1][%s]"%(name,name))
-	self.SubCollection("%s0"%name,collection)
-	self.SubCollection("%s1"%name,collection)
+	self.SubCollectionFromIndices("%s0"%name,collection)
+	self.SubCollectionFromIndices("%s1"%name,collection)
 
     def Define(self,name,code,inputs=[],requires=[]):
 	if name not in self.validCols :
@@ -86,7 +97,7 @@ class SampleProcessing:
 	else :
 	    print "Attempt to redefine column", name," => noop"
 
-    def Filter(self,name,code,inputs=[]) :
+    def Selection(self,name,code,inputs=[]) :
         if name not in self.validCols :
             self.validCols.append(name)
 	    pcode=self.preprocess(code)
@@ -116,7 +127,7 @@ class SampleProcessing:
 	   if t.kind==clang.cindex.TokenKind.IDENTIFIER :
 	     if t.spelling in self.validCols:
 	            identifiers.add(t.spelling)
-
+	     
 	ret=[]
 	regBound="[^a-zA-Z0-9_]"
 	for c in identifiers:
@@ -220,7 +231,7 @@ class SampleProcessing:
                         selections.append(s)
                  self.Define(x_syst,ncode,requires=selections)
              if x in self.filters:
-                 self.Filter(x_syst,ncode)
+                 self.Selection(x_syst,ncode)
 
 
 
