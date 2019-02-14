@@ -36,9 +36,9 @@ class SampleProcessing:
 #	print 'TLorentzVector makeP4(float pt,float eta,float phi,float m) { TLorentzVector r; r.SetPtEtaPhiM(pt,eta,phi,m); return r;}'
 
 	print "gSystem->Load(\"libGenVector.so\")"
-	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_]+)\]","ROOT::Math::PtEtaPhiMVector(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
+	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_\[\]]+)\]","ROOT::Math::PtEtaPhiMVector(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
 	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::PtEtaPhiMVector(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
-
+	self.AddCodeRegex(("@p4v\(([a-zA-Z0-9_]+)\)","vector_map_t<ROOT::Math::PtEtaPhiMVector>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
     def AddCodeRegex(self,regexp):
 	self.regexps.append(regexp)
 
@@ -47,8 +47,11 @@ class SampleProcessing:
 	for k in kwargs.keys() :
 	    self.Define(k,"%s"%(kwargs[k]))
 
-    def SubCollection(self,name,existing,sel):
-	self.Define(name,sel)
+    def SubCollection(self,name,existing,sel=""):
+	if sel!="":
+		self.Define(name,sel)
+	else :
+		sel=name
 	l=len(existing)
 	additionalCols= [ (name+c[l:],c) for c in self.validCols  if c[0:l+1]==existing+"_" ]
 	for (ac,oc) in additionalCols :	
@@ -57,6 +60,20 @@ class SampleProcessing:
 	   else:
 	       self.Define(ac,"%s[%s]"%(oc,name))
 	self.Define("n%s"%name,"Sum(%s)"%(name))
+
+    def Distinct(self,name,collection) :
+	if collection not in self.validCols :
+	   if "n%s"%collection in self.validCols:
+		self.Define(collection,"RVec<bool>(n%s,true)"%collection)
+	   else :
+		print "Cannot find collection",collection
+		return
+	self.Define("%s_allpairs"%name,"Combinations(Nonzero(%s),Nonzero(%s))"%(collection,collection))
+	self.Define(name,"%s_allpairs[0] > %s_allpairs[1]"%(name,name))
+	self.Define("%s0"%name,"%s_allpairs[0][%s]"%(name,name))
+	self.Define("%s1"%name,"%s_allpairs[1][%s]"%(name,name))
+	self.SubCollection("%s0"%name,collection)
+	self.SubCollection("%s1"%name,collection)
 
     def Define(self,name,code,inputs=[],requires=[]):
 	if name not in self.validCols :
@@ -115,42 +132,46 @@ class SampleProcessing:
 	    code=re.sub(s,r,code)
 	return code
 
-    def printRDF(self,to):
+    def printRDF(self,to,optimizeFilters=False):
 	#print 'ROOT::RDataFrame rdf("Events","/gpfs/ddn/cms/user/mandorli/Hmumu/CMSSW_9_4_6/src/Skim0/fileSkim2016/VBF_HToMuMu_nano2016.root");'
 	print 'ROOT::RDataFrame rdf("Events","/dev/shm/VBF_HToMuMu_nano2016.root");'
 	print "auto toplevel ="
 	rdf="rdf"
-	allfilters=set([s for t in to for s in self.selections[t]])
-	allfiltersinputs=set([i for t in to for s in self.selections[t] for i in self.allNodesTo(s)])
-        filterstring="||".join( ["(%s)"%("&&".join(self.selections[t])) for t in to])
-      	orderedColumns=[x for x in self.validCols if x in allfiltersinputs] + [x for x in self.validCols if x not in allfiltersinputs]
-	commonfilters=set(self.selections[to[0]]) if len(to) > 0 else set()
-	for s in to[1:]:
-	    commonfilters.intersection_update(self.selections[s])
+	if optimizeFilters :
+	    allfilters=set([s for t in to for s in self.selections[t]])
+	    allfiltersinputs=set([i for t in to for s in self.selections[t] for i in self.allNodesTo(s)])
+            filterstring="||".join( ["(%s)"%("&&".join(self.selections[t])) for t in to])
+      	    orderedColumns=[x for x in self.validCols if x in allfiltersinputs] + [x for x in self.validCols if x not in allfiltersinputs]
+	    commonfilters=set(self.selections[to[0]]) if len(to) > 0 else set()
+	    for s in to[1:]:
+	        commonfilters.intersection_update(self.selections[s])
 	
 	#or t in to :
 	#  sels=self.selections[t]
 	#  filters.add('&&'.join(self.selections[t])
 	
 	toprint=set([x for t in to for x in self.allNodesTo(t)])
-	#for c in orderedColumns:
-	for c in self.validCols:
+	cols=self.validCols if not optimizeFilters else orderedColumns
+	for c in cols :
            if c in toprint:
 	    if c in self.obs or c in self.filters :
 	        print '%s.Define("%s","%s")'%(rdf,c,self.code[c])
-		if c in allfilters :
+		if optimizeFilters :
+		    if c in allfilters :
 			allfilters.remove(c)
-		if len(allfilters) == 0 and filterstring!="":
+		    if len(allfilters) == 0 and filterstring!="":
 			print '%s.Filter("%s")'%(rdf,filterstring)
 			filterstring=""
-		if c in commonfilters :
+		    if c in commonfilters :
 		        print '%s.Filter("%s")'%(rdf,c)
 		
 		rdf=""
 	print ";"
         for t in to :
-  	    print 'auto %s=toplevel.Filter("%s").Histo1D("%s");'%(t,'&&'.join(self.selections[t]),t)
-
+	    if len(self.selections[t]) > 0 :
+	  	    print 'auto %s=toplevel.Filter("%s").Histo1D("%s");'%(t,'&&'.join(self.selections[t]),t)
+	    else:
+	  	    print 'auto %s=toplevel.Histo1D("%s");'%(t,t)
 
     def baseInputs(self,x) :
         if len(self.inputs[x]) == 0 :
