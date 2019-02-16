@@ -1,5 +1,6 @@
 import clang.cindex
 import re
+import sys
 class AggregatedSample:
     def __init__(self,*args):
       self.samples=list(args)
@@ -27,6 +28,7 @@ class SampleProcessing:
 	self.regexps=[]
 	self.validCols=[x[0] for x in cols]
 	self.inputTypes={x[0]:x[1] for x in cols}
+	print >> sys.stderr, "Start"
 #	print self.inputTypes
 	for c,t in cols:
 	    self.inputs[c]=[]
@@ -35,10 +37,11 @@ class SampleProcessing:
 #	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","makeP4(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
 #	print 'TLorentzVector makeP4(float pt,float eta,float phi,float m) { TLorentzVector r; r.SetPtEtaPhiM(pt,eta,phi,m); return r;}'
 
-	print "gSystem->Load(\"libGenVector.so\")"
+#	print "gSystem->Load(\"libGenVector.so\")"
 	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_\[\]]+)\]","ROOT::Math::PtEtaPhiMVector(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
 	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::PtEtaPhiMVector(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
 	self.AddCodeRegex(("@p4v\(([a-zA-Z0-9_]+)\)","vector_map_t<ROOT::Math::PtEtaPhiMVector>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
+	self.nodesto={}
     def AddCodeRegex(self,regexp):
 	self.regexps.append(regexp)
 
@@ -47,19 +50,20 @@ class SampleProcessing:
 	for k in kwargs.keys() :
 	    self.Define(k,"%s"%(kwargs[k]))
 
-    def SubCollection(self,name,existing,sel=""):
+    def SubCollection(self,name,existing,sel="",requires=[],singleton=False):
 	if sel!="":
-		self.Define(name,sel)
+		self.Define(name,sel,requires=requires)
 	else :
 		sel=name
 	l=len(existing)
 	additionalCols= [ (name+c[l:],c) for c in self.validCols  if c[0:l+1]==existing+"_" ]
 	for (ac,oc) in additionalCols :	
 	   if oc in self.inputTypes and self.inputTypes[oc] =='Bool_t' :
-	       self.Define(ac,"(1*%s)[%s]"%(oc,name)) #FIX RDF BUG
+	       self.Define(ac,"(1*%s)[%s]"%(oc,name),requires=requires) #FIX RDF BUG
 	   else:
-	       self.Define(ac,"%s[%s]"%(oc,name))
-	self.Define("n%s"%name,"Sum(%s)"%(name))
+	       self.Define(ac,"%s[%s]"%(oc,name),requires=requires)
+	if not singleton:
+		self.Define("n%s"%name,"Sum(%s)"%(name),requires=requires)
 
     def SubCollectionFromIndices(self,name,existing,sel=""):
         if sel!="":
@@ -72,10 +76,13 @@ class SampleProcessing:
             self.Define(ac,"Take(%s,%s)"%(oc,name))
         self.Define("n%s"%name,"%s.size()"%(name))
 
+    def ObjectAt(self,name,existing,index="",requires=[]):
+	self.SubCollection(name,existing,index,requires,True)
+
     def Distinct(self,name,collection,selection="") :
 	if collection not in self.validCols :
 	   if "n%s"%collection in self.validCols:
-		self.Define(collection,"RVec<bool>(n%s,true)"%collection)
+		self.Define(collection,"ROOT::VecOps::RVec<unsigned int>(n%s,true)"%collection)
 	   else :
 		print "Cannot find collection",collection
 		return
@@ -86,7 +93,14 @@ class SampleProcessing:
 	self.SubCollectionFromIndices("%s0"%name,collection)
 	self.SubCollectionFromIndices("%s1"%name,collection)
 
+    def TakePair(self,name,existing,pairs,index,requires=[]):
+	self.Define("%s_indices"%(name),index,requires=requires)
+	for i in [0,1]:
+	    self.ObjectAt("%s%s"%(name,i), existing,"int(%s%s[%s_indices])"%(pairs,i,name),requires=requires)
+
+
     def Define(self,name,code,inputs=[],requires=[]):
+	print >> sys.stderr, name
 	if name not in self.validCols :
   	    self.validCols.append(name)
 	    pcode=self.preprocess(code)
@@ -194,25 +208,32 @@ class SampleProcessing:
           return ret
     
     def allNodesTo(self,x) :   
-          ret=[x]
+	  if x in self.nodesto :
+		return self.nodesto[x]
+	  print >> sys.stderr, "Nodes to ",x
+          ret=set([x])
           for i in self.inputs[x] :
-             ret.extend(self.allNodesTo(i))
+             ret.update(self.allNodesTo(i))
           for i in self.selections[x] :
-             ret.extend(self.allNodesTo(i))
-          return list(set(ret))
+             ret.update(self.allNodesTo(i))
+	  self.nodesto[x]=ret;
+          return ret
 
     def allNodesFrom(self,x) :   
-          children=[n for n in self.inputs.keys() if x in self.inputs[n]+self.selections[n]]
-	  ret=children
+	  print >> sys.stderr, "Nodes from ",x
+          children=set([n for n in self.inputs.keys() if x in self.inputs[n]+self.selections[n]])
+	  ret=set(children)
 	  for c in children :
-             ret.extend(self.allNodesFrom(c))
-          return list(set(ret))
+             ret.update(self.allNodesFrom(c))
+          return ret
 
     def findAffectedNodesForSystematicOnTarget(self,name,target):
 	 return [x for x in self.allNodesFrom(self.syst[name]["original"]) if x in self.allNodesTo(target)]
    
     def createSystematicBranch(self,name,target):
+	 print >> sys.stderr, "Find affected"
          affected=(self.findAffectedNodesForSystematicOnTarget(name,target))
+	 print >> sys.stderr, "Found affected"
 	 affected.sort(key=lambda x: self.validCols.index(x)) #keep original sorting
          replacementTable=[(x,x+"__syst__"+name) for x in affected]
          for x,x_syst in replacementTable:
