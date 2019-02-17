@@ -30,44 +30,22 @@ flow.Selection("twoMuons","nSelectedMuon>=2")
 flow.Distinct("MuMu","SelectedMuon")
 flow.Define("OppositeSignMuMu","Nonzero(MuMu0_charge != MuMu1_charge)",requires=["twoMuons"])
 flow.Selection("twoOppositeSignMuons","OppositeSignMuMu.size() > 0")
-#flow.Define("Mu0","OppositeSignMuMu[0][0]", requires=["twoOppositeSignMuons"])
-#flow.Define("Mu1","OppositeSignMuMu[1][0]", requires=["twoOppositeSignMuons"])
-flow.ObjectAt("Mu0","SelectedMuon","int(MuMu0[OppositeSignMuMu[0]])",requires=["twoOppositeSignMuons"])
-flow.ObjectAt("Mu1","SelectedMuon","int(MuMu1[OppositeSignMuMu[0]])",requires=["twoOppositeSignMuons"])
-#flow.Define("Higgs","@p4(SelectedMuon)[Mu0]+@p4(SelectedMuon)[Mu1]")
+flow.TakePair("Mu","SelectedMuon","MuMu","OppositeSignMuMu[0]",requires=["twoOppositeSignMuons"])
 flow.Define("Higgs","Mu0_p4+Mu1_p4")
 
 #VBF Jets kinematics
 flow.DefaultConfig(jetPtCut=25)
 flow.SubCollection("SelectedJet","Jet","Jet_pt > jetPtCut && (Jet_muonIdx1 == -1 || Take(Muon_iso,Jet_muonIdx1) > muIsoCut || Take(Muon_id,Jet_muonIdx1) > 0)")
 flow.Selection("twoJets","nSelectedJet>=2")
-
 flow.Define("GenJet_p4","@p4v(GenJet)")
 flow.Define("SelectedJet_p4","@p4v(SelectedJet)")
-#flow.Define("GenRecoJets","Combinations(SelectedJet,GenJet_pt)")
-#flow.Match("SelectedJet","GenJet","ROOT:Math::DeltaR(SelectedJet_p4,GenJet_p4)",threshold=0.4,needwrapper=True,unique=False,bidirectional=True)
-#flow.Define("GenRecoJets_dr","vector_map(ROOT:Math::DeltaR,SelectedJet_p4[GenRecoJets[0]],GenJet_p4[GenRecoJets[1]])")
 
-
-#find max(mass) on pair(Jet) with mass=($1.p4+$2.p4).M()
 flow.Distinct("JetPair","SelectedJet")
 flow.TakePair("QJet","SelectedJet","JetPair","Argmax(MemberMap((JetPair0_p4+JetPair1_p4),M() ))",requires=["twoJets"])
 
-#flow.Define("HighestPairMass","Argmax(MemberMap((JetPair0_p4+JetPair1_p4),M() ))")
-#flow.ObjectAt("QJet0","SelectedJet","int(JetPair0[HighestPairMass])")
-#flow.ObjectAt("QJet1","SelectedJet","int(JetPair1[HighestPairMass])")
-
-#flow.Define("JetPair_p4","JetPair0_p4+JetPair1_p4",requires=["twoJets"])
-#flow.Define("JetPair_mass","Map(JetPair_p4,[](auto x){RETURN x.M()'})")
-#flow.Define("HighestPairMass","Argmax(JetPair_mass)")
-
-
-#flow.DefineObject("QJet0","SelectedJet","Jet0")
-#flow.DefineObject("QJet1","SelectedJet","Jet1")
-##flow.Define("QJet0_p4","@p4(SelectedJet)[Jet0]")
-##flow.Define("QJet1_p4","@p4(SelectedJet)[Jet1]")
 flow.Define("qq","QJet0_p4+QJet1_p4")
 flow.Define("Mqq","qq.M()")
+flow.Define("MqqGenJet","(QJet0_genJetIdx>=0&&QJet1_genJetIdx>=0&&QJet0_genJetIdx<nGenJet&&QJet1_genJetIdx<nGenJet)?(GenJet_p4[QJet0_genJetIdx]+GenJet_p4[QJet1_genJetIdx]).M():-99")
 flow.Define("qq_pt","qq.Pt()")
 flow.Define("qqDeltaEta","abs(QJet0_eta-QJet1_eta)")
 flow.Define("qqDeltaPhi","TMath::Abs(ROOT::Math::VectorUtil::DeltaPhi(QJet0_p4,QJet1_p4))")
@@ -96,14 +74,14 @@ flow.Define("SBClassifier","Higgs_pt+Higgs_m+Mqq+Rpt+DeltaRelQQ",inputs=["Higgs_
 
 
 #Define Systematic variations
-flow.Define("Muon_pt_scaleUp","Muon_pt*1.01")
+flow.Define("Muon_pt_scaleUp","Muon_pt*1.01") #this should be protected against systematic variations
 flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
-#for i in range(100):
-#  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100."%i)
-#  flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
+for i in range(100):
+  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100."%i)
+  flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
 flow.createSystematicBranch("MuScaleUp","SBClassifier")
 #for i in range(100):
@@ -152,7 +130,7 @@ auto mass(const ROOT::Math::PtEtaPhiMVector &i){
 #define RETURN return 
 ''' 
 print >> sys.stderr, "Number of known columns", len(flow.validCols)
-flow.printRDF(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta"])
+flow.printRDF(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
 
 #flow.printRDF(["Higgs_m","SBClassifier","SBClassifier__syst__MuScaleUp"])
 

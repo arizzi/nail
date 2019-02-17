@@ -216,19 +216,37 @@ class SampleProcessing:
              ret.update(self.allNodesTo(i))
           for i in self.selections[x] :
              ret.update(self.allNodesTo(i))
+	  #this is cached because it cannot change
 	  self.nodesto[x]=ret;
           return ret
+    def allNodesFromWithWhiteList(self,x,wl,cache={}) :
+          #cache is local because it changes with more defines
+          if x in cache :
+             return cache[x]
+          print >> sys.stderr, "Nodes from ",x
+          children=set([n for n in self.inputs.keys() if ((x in self.inputs[n]+self.selections[n]) and (n in wl))])
+          ret=set(children)
+          for c in children :
+             ret.update(self.allNodesFromWithWhiteList(c,wl,cache))
+          cache[x]=ret
+          return ret
 
-    def allNodesFrom(self,x) :   
+
+    def allNodesFrom(self,x,cache={}) :   
+	  #cache is local because it changes with more defines
+	  if x in cache :
+	     return cache[x]
 	  print >> sys.stderr, "Nodes from ",x
           children=set([n for n in self.inputs.keys() if x in self.inputs[n]+self.selections[n]])
 	  ret=set(children)
 	  for c in children :
-             ret.update(self.allNodesFrom(c))
+             ret.update(self.allNodesFrom(c,cache))
+	  cache[x]=ret
           return ret
 
     def findAffectedNodesForSystematicOnTarget(self,name,target):
-	 return [x for x in self.allNodesFrom(self.syst[name]["original"]) if x in self.allNodesTo(target)]
+	 nodesTo= self.allNodesTo(target)
+	 return [x for x in self.allNodesFromWithWhiteList(self.syst[name]["original"],nodesTo) if x in nodesTo]
    
     def createSystematicBranch(self,name,target):
 	 print >> sys.stderr, "Find affected"
