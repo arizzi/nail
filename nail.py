@@ -15,7 +15,7 @@ class Sample:
 
 class SampleProcessing:
 
-    def __init__(self,name,cols):
+    def __init__(self,name,cols,dftypes):
 	self.name=name
         self.obs={} 
         self.filters={} 
@@ -25,9 +25,11 @@ class SampleProcessing:
 	self.syst={}
 	self.conf={}
 	self.histos={}
+	self.weights=[]
 	self.regexps=[]
 	self.validCols=[x[0] for x in cols]
 	self.inputTypes={x[0]:x[1] for x in cols}
+	self.dftypes=dftypes
 	print >> sys.stderr, "Start"
 #	print self.inputTypes
 	for c,t in cols:
@@ -106,7 +108,7 @@ class SampleProcessing:
 	    pcode=self.preprocess(code)
             self.obs[name]={}
             self.code[name]=pcode
-            self.inputs[name]=self.findCols(pcode)+inputs
+            self.inputs[name]=list(set(self.findCols(pcode)+inputs))
             self.selections[name]=list(set(requires+[y for x in self.inputs[name] if x in self.selections for y in self.selections[x]]))
 	else :
 	    print "Attempt to redefine column", name," => noop"
@@ -117,21 +119,35 @@ class SampleProcessing:
 	    pcode=self.preprocess(code)
 	    self.filters[name]={}
             self.code[name]=pcode
-            self.inputs[name]=self.findCols(pcode)
+            self.inputs[name]=list(set(self.findCols(pcode)))
             self.selections[name]=list(set([y for x in self.inputs[name] if x in self.selections for y in self.selections[x]]))
 
 	else :
 	    print "Attempt to redefine column", name," => noop"
 
-    def Systematic(self,name,original,modified): 
+    def Systematic(self,name,original,modified, exceptions=[])
+	self.Variation(name,original,modified, exceptions)
+
+    def Variation(self,name,original,modified,exceptions=[])
 	self.syst[name]={}
         self.syst[name]["original"]=original
         self.syst[name]["modified"]=modified
+	self.syst[name]["exceptions"]=exceptions
+
+    def AddWeight(self,name,code=""):
+	if code:
+		self.Define(name,code)
+	self.weights.append(name)
+
+    def AddWeightArray(self,name,nentries=1):
+	for i in range(nentries):
+		self.AddWeight("%s%s"%(name,i),"%s[%s]"%(name,i))
 
     def Histo(self,name,binHint=None):
 	self.histos[name]={}
+	self.histos["bin"]=binHint
 
-	
+    
 
     def findCols(self,code) :
 	idx = clang.cindex.Index.create()
@@ -198,6 +214,43 @@ class SampleProcessing:
 	    else:
 	  	    print 'auto %s=toplevel.Histo1D("%s");'%(t,t)
 
+    def printRDFCpp(self,to,optimizeFilters=False):
+
+        toprint=set([x for t in to for x in self.allNodesTo(t)])
+        cols=self.validCols if not optimizeFilters else orderedColumns
+        for c in cols :
+           if c in toprint:
+            if c in self.obs or c in self.filters :
+		inputs=""
+		for i in self.inputs[c]:
+		   if inputs!="":
+		       inputs+=", "
+		   inputs+="const %s & %s"%(self.dftypes[i],i)
+		#print "auto func__%s = [](%s) { return %s; };" %(c,inputs,self.code[c])
+		print "auto func__%s(%s) { return %s; }" %(c,inputs,self.code[c])
+		print "using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;"%(c,c)
+		self.dftypes[c]="type__%s"%(c)
+
+	print 'int main(){'
+        print 'ROOT::RDataFrame rdf("Events","/dev/shm/VBF_HToMuMu_nano2016.root");'
+        rdf="rdf"
+
+        print "auto toplevel ="
+        for c in cols :
+           if c in toprint:
+            if c in self.obs or c in self.filters :
+                print '%s.Define("%s",func__%s,{%s})'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]]))
+                rdf=""
+        print ";"
+        for t in to :
+            if len(self.selections[t]) > 0 :
+                    print 'auto %s=toplevel.Filter("%s").Histo1D("%s");'%(t,'&&'.join(self.selections[t]),t)
+            else:
+                    print 'auto %s=toplevel.Histo1D("%s");'%(t,t)
+	print 'return 0;}'
+
+
+
     def baseInputs(self,x) :
         if len(self.inputs[x]) == 0 :
           return [x]
@@ -257,7 +310,7 @@ class SampleProcessing:
          for x,x_syst in replacementTable:
 
              ncode=" "+self.code[x]+" "  #FIXME: we should avoid duplicating the code
-             for y,y_syst in replacementTable:
+             for y,y_syst in replacementTable+[(self.syst[name]["original"],self.syst[name]["modified"])]:
 	         regBound="([^a-zA-Z0-9_])"
                  reg=regBound+y+regBound
                  ncode=re.sub(reg,"\\1"+y_syst+"\\2",ncode)

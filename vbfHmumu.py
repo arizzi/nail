@@ -6,9 +6,12 @@ import sys
 f=ROOT.TFile.Open("/dev/shm/VBF_HToMuMu_nano2016.root")
 e=f.Get("Events")
 allbranches=[(x.GetName(),x.GetListOfLeaves()[0].GetTypeName()) for x in e.GetListOfBranches()]
+df=ROOT.RDataFrame("Events","/dev/shm/VBF_HToMuMu_nano2016.root")
+dftypes={x[0]:df.GetColumnType(x[0]) for x in allbranches}
+
 
 print >>sys.stderr, "ROOT loaded"
-flow=SampleProcessing("",allbranches)
+flow=SampleProcessing("",allbranches,dftypes)
 #flow=SampleProcessing("",["Muon_pt","Muon_eta","Muon_phi","Muon_tightId","Muon_looseId","Jet_pt","Muon_iso","Jet_muonIdx1","Jet_eta","Jet_phi","Jet_mass"])
 flow.DefaultConfig(muIsoCut=0.13,muIdCut=3,muPtCut=25) #cuts value should not be hardcoded below but rather being declared here so that scans and optimizations are possible
 
@@ -39,9 +42,10 @@ flow.SubCollection("SelectedJet","Jet","Jet_pt > jetPtCut && (Jet_muonIdx1 == -1
 flow.Selection("twoJets","nSelectedJet>=2")
 flow.Define("GenJet_p4","@p4v(GenJet)")
 flow.Define("SelectedJet_p4","@p4v(SelectedJet)")
-
 flow.Distinct("JetPair","SelectedJet")
 flow.TakePair("QJet","SelectedJet","JetPair","Argmax(MemberMap((JetPair0_p4+JetPair1_p4),M() ))",requires=["twoJets"])
+#flow.ObjectAt("QJet0","SelectedJet","0",requires=["twoJets"])
+#flow.ObjectAt("QJet1","SelectedJet","1",requires=["twoJets"])
 
 flow.Define("qq","QJet0_p4+QJet1_p4")
 flow.Define("Mqq","qq.M()")
@@ -70,7 +74,7 @@ flow.Selection("SignalRegion","VBFRegion && MassWindow")
 #flow.Trainable("SBClassifier","evalMVA",["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"],splitMode="TripleMVA",requires="VBFRegion") 
 flow.Define("Higgs_pt","Higgs.Pt()")
 flow.Define("Higgs_m","Higgs.M()")
-flow.Define("SBClassifier","Higgs_pt+Higgs_m+Mqq+Rpt+DeltaRelQQ",inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
+flow.Define("SBClassifier","Higgs_pt+Higgs_m+Mqq+Rpt+DeltaRelQQ") #,inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
 
 
 #Define Systematic variations
@@ -79,16 +83,16 @@ flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
-for i in range(100):
-  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100."%i)
-  flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
+#for i in range(1):
+#  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100."%i)
+#  flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
-flow.createSystematicBranch("MuScaleUp","SBClassifier")
-#for i in range(100):
+#flow.createSystematicBranch("MuScaleUp","SBClassifier")
+#for i in range(1):
 #   print >> sys.stderr, "JEC",i
 #   flow.createSystematicBranch("JEC%s"%i,"SBClassifier")
   
-#flow.createSystematicBranch("MuScaleDown","SBClassifier")
+flow.createSystematicBranch("MuScaleDown","SBClassifier")
 
 print '''
 #include <Math/VectorUtil.h>
@@ -130,8 +134,10 @@ auto mass(const ROOT::Math::PtEtaPhiMVector &i){
 #define RETURN return 
 ''' 
 print >> sys.stderr, "Number of known columns", len(flow.validCols)
-flow.printRDF(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
+#flow.printRDFCpp(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
+flow.printRDFCpp(["GenQQ_mass","QJet0","QJet1","Rpt","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"])
 
-#flow.printRDF(["Higgs_m","SBClassifier","SBClassifier__syst__MuScaleUp"])
+
+#flow.printRDF(list(flow.allNodesTo("SBClassifier")))
 
 
