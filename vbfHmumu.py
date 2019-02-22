@@ -22,7 +22,7 @@ flow.Define("QParton_p4","@p4v(QParton)")
 flow.Distinct("QQ","QParton")
 flow.Selection("twoQ","nQParton>=2")
 flow.Define("QQ_p4","QQ0_p4+QQ1_p4",requires=["twoQ"])
-flow.Define("GenQQ_mass","MemberMap(QQ_p4,M())")
+flow.Define("QQ_mass","MemberMap(QQ_p4,M())")
 flow.Define("HighestGenQQMass","QQ_mass[Argmax(QQ_mass)]")
 
 flow.Define("Muon_id","Muon_tightId*3+Muon_mediumId") 
@@ -76,6 +76,28 @@ flow.Define("Higgs_pt","Higgs.Pt()")
 flow.Define("Higgs_m","Higgs.M()")
 flow.Define("SBClassifier","Higgs_pt+Higgs_m+Mqq+Rpt+DeltaRelQQ") #,inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
 
+#define some event weights
+flow.Define("SelectedJet_btagWeight","vector_map(btagWeight,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
+flow.Define("btagEventWeight","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
+flow.AddDefaultWeight("genWeight")
+flow.AddDefaultWeight("btagEventWeight")
+
+#Systematic weights
+flow.AddWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
+#this is not obvious as N replicas can change... think about it
+flow.AddWeightArray("LHEPdfWeight",30,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
+
+
+#create btag systematics
+#this should be simplified
+flow.Define("SelectedJet_btagWeight_up","vector_map(btagWeightUp,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
+flow.Define("btagEventWeightUp","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
+flow.Systematic("BTagUp","SelectedJet_btagWeight","SelectedJet_btagWeight_up")
+flow.createVariationBranch("BTagUp","defaultWeight")
+for x in  flow.validCols :
+    if x[:len("defaultWeight")]=="defaultWeight" :
+	if x!="defaultWeight":
+		flow.AddWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
 
 #Define Systematic variations
 flow.Define("Muon_pt_scaleUp","Muon_pt*1.01") #this should be protected against systematic variations
@@ -83,19 +105,23 @@ flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
-#for i in range(1):
-#  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100."%i)
-#  flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
+for i in range(10):
+  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100."%i)
+  flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
-#flow.createSystematicBranch("MuScaleUp","SBClassifier")
-#for i in range(1):
-#   print >> sys.stderr, "JEC",i
-#   flow.createSystematicBranch("JEC%s"%i,"SBClassifier")
+for i in range(10):
+   print >> sys.stderr, "JEC",i
+   flow.createVariationBranch("JEC%s"%i,"SBClassifier")
   
-flow.createSystematicBranch("MuScaleDown","SBClassifier")
+flow.createVariationBranch("MuScaleUp","SBClassifier")
+flow.createVariationBranch("MuScaleDown","SBClassifier")
+
 
 print '''
 #include <Math/VectorUtil.h>
+#include <ROOT/RVec.hxx>
+#include "Math/Vector4D.h"
+#include <ROOT/RDataFrame.hxx>
 
 template <typename type>
 auto Argmax(const type & v){
@@ -130,12 +156,24 @@ auto mass(const ROOT::Math::PtEtaPhiMVector &i){
  return i.M();
 }
 
+float btagWeight(float csv,float pt,float eta){
+ return 1.01;
+}
+float btagWeightUp(float csv,float pt,float eta){
+ return 1.03;
+}
+
 #define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
 #define RETURN return 
 ''' 
 print >> sys.stderr, "Number of known columns", len(flow.validCols)
 #flow.printRDFCpp(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
-flow.printRDFCpp(["GenQQ_mass","QJet0","QJet1","Rpt","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"])
+for x in ["QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"] :
+	flow.Histo(x)
+
+
+
+flow.printRDFCpp(["QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"]+flow.weights.keys())
 
 
 #flow.printRDF(list(flow.allNodesTo("SBClassifier")))
