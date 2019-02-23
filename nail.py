@@ -1,3 +1,4 @@
+import ROOT
 import clang.cindex
 import re
 import sys
@@ -15,7 +16,15 @@ class Sample:
 
 class SampleProcessing:
 
-    def __init__(self,name,cols,dftypes):
+    def __init__(self,name,filename) :
+        f=ROOT.TFile.Open(filename)
+	e=f.Get("Events")
+	allbranches=[(x.GetName(),x.GetListOfLeaves()[0].GetTypeName()) for x in e.GetListOfBranches()]
+	df=ROOT.RDataFrame("Events",filename)
+	dftypes={x[0]:df.GetColumnType(x[0]) for x in allbranches}
+        self.init(name,allbranches,dftypes) 	
+
+    def init(self,name,cols,dftypes):
 	self.name=name
         self.obs={} 
         self.filters={} 
@@ -54,6 +63,19 @@ class SampleProcessing:
 	self.conf.update(kwargs)
 	for k in kwargs.keys() :
 	    self.Define(k,"%s"%(kwargs[k]))
+
+    def colsForObject(self,name):
+	l=len(name)
+	return [ c[l+1:] for c in self.validCols  if c[0:l+1]==name+"_" ]
+
+    def MergeCollections(self,name,collections,requires=[]):
+ 	commonCols=set(self.colsForObject(collections[0]))
+	print commonCols
+	for coll in collections[1:] :
+	    commonCols=commonCols.intersection(self.colsForObject(coll))
+	self.Define("n"+name,"+".join(["n"+coll for coll in collections]))
+	for ac in commonCols :
+	    self.Define(name+"_"+ac,"Concat(%s)"%(",".join([c+"_"+ac for c in collections]) ))
 
     def SubCollection(self,name,existing,sel="",requires=[],singleton=False):
 	if sel!="":
@@ -103,6 +125,11 @@ class SampleProcessing:
 	for i in [0,1]:
 	    self.ObjectAt("%s%s"%(name,i), existing,"int(%s%s[%s_indices])"%(pairs,i,name),requires=requires)
 
+#    def DefineWithWildCards(self,name,function,inputs,requires=[])
+	# need for example for HLT bits
+	#efineWithWildCars("HLTMuon","multiOR"
+#	print "Not implemented"
+#	pass
 
     def Define(self,name,code,inputs=[],requires=[]):
 	print >> sys.stderr, name
@@ -142,7 +169,6 @@ class SampleProcessing:
     def AddDefaultWeight(self,name):
 	if not name in self.defweights:
 	    self.defweights.append(name)
-	    #update defaultWeight string
 	    self.Define("defaultWeight","*".join(self.defweights))
 
     def AddWeight(self,name,code="",filt=lambda x,y: True,nodefault=False):
@@ -225,14 +251,15 @@ class SampleProcessing:
 	print ";"
         for t in to :
 	    if len(self.selections[t]) > 0 :
-	  	    print 'auto %s=toplevel.Filter("%s").Histo1D("%s");'%(t,'&&'.join(self.selections[t]),t)
+		    
+	  	    print 'auto %s=toplevel.Filter("%s").Histo1D("%s");'%(t,'").Filter("'.join(self.selections[t]),t)
 	    else:
 	  	    print 'auto %s=toplevel.Histo1D("%s");'%(t,t)
 
-    def printRDFCpp(self,to,optimizeFilters=False):
+    def printRDFCpp(self,to,debug=False):
 
         toprint=set([x for t in to for x in self.allNodesTo(t)])
-        cols=self.validCols if not optimizeFilters else orderedColumns
+        cols=self.validCols # if not optimizeFilters else orderedColumns
         for c in cols :
            if c in toprint:
             if c in self.obs or c in self.filters :
@@ -242,7 +269,10 @@ class SampleProcessing:
 		       inputs+=", "
 		   inputs+="const %s & %s"%(self.dftypes[i],i)
 		#print "auto func__%s = [](%s) { return %s; };" %(c,inputs,self.code[c])
-		print "auto func__%s(%s) { return %s; }" %(c,inputs,self.code[c])
+		debugcode="\n"
+		if debug :
+			debugcode='std::cout << "%s" << std::endl;\n'%c
+		print "auto func__%s(%s) { %s return %s; }" %(c,inputs,debugcode,self.code[c])
 		print "using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;"%(c,c)
 		self.dftypes[c]="type__%s"%(c)
 
@@ -258,7 +288,8 @@ int main(int argc, char** argv)
 '''
         print 'ROOT::RDataFrame rdf("Events","/dev/shm/VBF_HToMuMu_nano2016.root");'
         rdf="rdf"
-
+	if debug:
+	   rdf="rdf.Range(1000)"
         print "auto toplevel ="
         for c in cols :
            if c in toprint:
@@ -270,7 +301,7 @@ int main(int argc, char** argv)
         for t in to :
 	    if t in self.histos:
                 if len(self.selections[t]) > 0 :
-                    print 'auto %s_neededselection=toplevel.Filter("%s");'%(t,'&&'.join(self.selections[t]))
+                    print 'auto %s_neededselection=toplevel.Filter("%s");'%(t,'").Filter("'.join(self.selections[t]))
 		    rdf="%s_neededselection"%t
                 else:
 		    rdf="toplevel"
@@ -309,7 +340,7 @@ int main(int argc, char** argv)
     def allNodesTo(self,x) :   
 	  if x in self.nodesto :
 		return self.nodesto[x]
-	  print >> sys.stderr, "Nodes to ",x
+#	  print >> sys.stderr, "Nodes to ",x
           ret=set([x])
           for i in self.inputs[x] :
              ret.update(self.allNodesTo(i))
@@ -322,7 +353,7 @@ int main(int argc, char** argv)
           #cache is local because it changes with more defines
           if x in cache :
              return cache[x]
-          print >> sys.stderr, "Nodes from ",x
+#          print >> sys.stderr, "Nodes from ",x
           children=set([n for n in self.inputs.keys() if ((x in self.inputs[n]+self.selections[n]) and (n in wl))])
           ret=set(children)
           for c in children :
