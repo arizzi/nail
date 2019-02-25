@@ -27,7 +27,7 @@ flow.Define("LooseMuon_pid","(LooseMuon_pt*0)+13")
 flow.Define("LooseEle_pid","(LooseEle_pt*0)+11")
 flow.MergeCollections("Lepton",["LooseMuon","LooseEle"])
 
-#Match jets to Leptons
+#Match jets to selected loose Leptons
 flow.Define("Jet_p4","@p4v(Jet)")
 flow.MatchDeltaR("Jet","Lepton",embed=(["pt","pid"],[]))
 
@@ -62,13 +62,28 @@ flow.TakePair("ZLep","Lepton","LPair","Argmax(-abs(MemberMap((LPair0_p4+LPair1_p
 flow.Define("Z","ZLep0_p4+ZLep1_p4")
 flow.Define("Z_mass","Z.M()")
 #    * Highest pt pair
+flow.TakePair("LepHPt","Lepton","LPair","Argmax((MemberMap((LPair0_p4+LPair1_p4),pt() ))*isOSSF)",requires=["hasOSSF"])
+flow.Define("OSSFHPt","LepHpt0_p4+LepHPt1_p4")
+flow.Define("OSSFHPt_mass","OSSFHPt.M()")
+
 #    * Highest mass pair
+flow.TakePair("LepHM","Lepton","LPair","Argmax(MemberMap((LPair0_p4+LPair1_p4),M() )*isOSSF)",requires=["hasOSSF"])
+flow.Define("OSSFHM","LepHM0_p4+LepHM1_p4")
+flow.Define("OSSFHM_mass","OSSFHM.M()")
 
 # * Find opposite sign, opposite flavour pairs
 flow.Define("isOSOF","LPair0_charge != LPair1_charge && LPair0_pid != LPair1_pid",requires=["twoLeptons"])
 flow.Selection("hasOSOF","Sum(isOSOF)")
 #    * Highest pt pair
+flow.TakePair("LepOFHPt","Lepton","LPair","Argmax((MemberMap((LPair0_p4+LPair1_p4),pt() ))*isOSOF)",requires=["hasOSOF"])
+flow.Define("OSOFHPt","LepOFHpt0_p4+LepOFHPt1_p4")
+flow.Define("OSOFHPt_mass","OSOFHPt.M()")
+
 #    * Highest mass pair
+flow.TakePair("LepOFHM","Lepton","LPair","Argmax(MemberMap((LPair0_p4+LPair1_p4),M() )*isOSOF)",requires=["hasOSOF"])
+flow.Define("OSOFHM","LepOFHM0_p4+LepOFHM1_p4")
+flow.Define("OSOFHM_mass","OSOFHM.M()")
+
 
 # * Find jj on W mass
 flow.Distinct("JJ","CleanJet")
@@ -77,7 +92,7 @@ flow.Selection("twoJets","nCleanJet>=2")
 #    * Closest to W mass
 flow.TakePair("JJBestWMass","CleanJet","JJ","Argmax(-abs(MemberMap((JJPair0_p4+JJPair1_p4),M() )-80.4))",requires=["twoJets"])
 #    * Minimizing (Mjj-Mw)**2/(20)**2 + j1_btag+j2_btag (proxy for an actual likelihood) 
-flow.TakePair("JJBestLike","CleanJet","JJ","Argmax(-abs(MemberMap((JJPair0_p4+JJPair1_p4),M() )-80.4)/20.-JJPair0_btag-JJPair1_btag)",requires=["twoJets"])
+flow.TakePair("JJBestLike","CleanJet","JJ","Argmax(-(pow(MemberMap((JJPair0_p4+JJPair1_p4),M() )-80.4,2)/400.)-JJPair0_btag-JJPair1_btag)",requires=["twoJets"])
 
 # * Define B tagged jets
 #    * Tight tagged
@@ -160,11 +175,11 @@ flow.AddWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not 
 flow.Define("CleanJet_btagWeight_up","vector_map(btagWeightUp,CleanJet_btag,CleanJet_pt,CleanJet_eta)")
 flow.Define("btagEventWeightUp","std::accumulate(CleanJet_btagWeight.begin(),CleanJet_btagWeight.end(),1, std::multiplies<double>())")
 flow.Systematic("BTagUp","CleanJet_btagWeight","CleanJet_btagWeight_up")
-flow.createVariationBranch("BTagUp","defaultWeight")
-#for x in  flow.validCols :
-#    if x[:len("defaultWeight")]=="defaultWeight" :
-#	if x!="defaultWeight":
-#		flow.AddWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
+flow.createVariationBranch("BTagUp",["defaultWeight"])
+for x in  flow.validCols :
+    if x[:len("defaultWeight")]=="defaultWeight" :
+	if x!="defaultWeight":
+		flow.AddWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
 
 #Define Systematic variations
 flow.Define("Muon_pt_scaleUp","Muon_pt*1.01") #this should be protected against systematic variations
@@ -188,10 +203,15 @@ colsToPlot=["nJet","nLepton","MHT","HT","Z_mass"]
 #TODO: multiple targets
 for i in range(2):
    print >> sys.stderr, "JEC",i
-   flow.createVariationBranch("JEC%s"%i,"Z_mass")
+   flow.createVariationBranch("JEC%s"%i,colsToPlot)
   
-flow.createVariationBranch("MuScaleUp","Z_mass")
-flow.createVariationBranch("MuScaleDown","Z_mass")
+flow.createVariationBranch("MuScaleUp",colsToPlot)
+flow.createVariationBranch("MuScaleDown",colsToPlot)
+
+colsToPlotWithSyst=[]
+for c in colsToPlot :
+    colsToPlotWithSyst+=[x for x in flow.validCols if x[:len(c)]==c]
+
 
 print '''
 #include <Math/VectorUtil.h>
@@ -205,12 +225,12 @@ print '''
 ''' 
 print >> sys.stderr, "Number of known columns", len(flow.validCols)
 #flow.printRDFCpp(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
-for x in colsToPlot :
+for x in colsToPlotWithSyst :
 	flow.Histo(x)
 
 
 
-flow.printRDFCpp(colsToPlot+flow.weights.keys()+["Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"],debug=False)
+flow.printRDFCpp(colsToPlotWithSyst+flow.weights.keys()+["Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"],debug=False)
 #["defaultWeight","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"]+flow.weights.keys(),debug=False)
 
 

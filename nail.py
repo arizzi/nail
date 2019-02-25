@@ -180,7 +180,8 @@ class SampleProcessing:
         self.variations[name]["modified"]=modified
 	self.variations[name]["exceptions"]=exceptions
 
-    def AddDefaultWeight(self,name):
+    #FIXME TODO add weights only in selections (and check dependencies)
+    def AddDefaultWeight(self,name,selections=[]):
 	if not name in self.defweights:
 	    self.defweights.append(name)
 	    self.Define("defaultWeight","*".join(self.defweights))
@@ -235,7 +236,7 @@ class SampleProcessing:
 	rdf="rdf"
 	if optimizeFilters :
 	    allfilters=set([s for t in to for s in self.selections[t]])
-	    allfiltersinputs=set([i for t in to for s in self.selections[t] for i in self.allNodesTo(s)])
+	    allfiltersinputs=set([i for t in to for s in self.selections[t] for i in self.allNodesTo([s])])
             filterstring="||".join( ["(%s)"%("&&".join(self.selections[t])) for t in to])
       	    orderedColumns=[x for x in self.validCols if x in allfiltersinputs] + [x for x in self.validCols if x not in allfiltersinputs]
 	    commonfilters=set(self.selections[to[0]]) if len(to) > 0 else set()
@@ -246,7 +247,7 @@ class SampleProcessing:
 	#  sels=self.selections[t]
 	#  filters.add('&&'.join(self.selections[t])
 	
-	toprint=set([x for t in to for x in self.allNodesTo(t)])
+	toprint=set([x for t in to for x in self.allNodesTo([t])])
 	cols=self.validCols if not optimizeFilters else orderedColumns
 	for c in cols :
            if c in toprint:
@@ -272,7 +273,7 @@ class SampleProcessing:
 
     def printRDFCpp(self,to,debug=False):
 
-        toprint=set([x for t in to for x in self.allNodesTo(t)])
+        toprint=set([x for t in to for x in self.allNodesTo([t])])
         cols=self.validCols # if not optimizeFilters else orderedColumns
         for c in cols :
            if c in toprint:
@@ -325,7 +326,9 @@ int main(int argc, char** argv)
 	                    print 'auto %s__weight__%s=%s.Histo1D("%s","%s");'%(t,w,rdf,t,w)
 
 	print '''
-   TStopwatch s;
+   auto tr=toplevel.Snapshot("ot", "outputFile.root", {"nJet","nLepton","Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"});
+   
+/*TStopwatch s;
    SBClassifier.OnPartialResult(0, [&s](TH1D &) {
       std::cout << "starting event loop" << std::endl;
       s.Start();
@@ -334,7 +337,7 @@ int main(int argc, char** argv)
    std::cout << "now jitting+event loop..." << std::endl;
    *SBClassifier;
    s.Stop();
-   std::cout << "elapsed time: " << s.RealTime() << "s" << std::endl;
+   std::cout << "elapsed time: " << s.RealTime() << "s" << std::endl;*/
    return 0;
 }
 '''
@@ -351,51 +354,61 @@ int main(int argc, char** argv)
              ret.extend(self.baseInputs(i))
           return ret
     
-    def allNodesTo(self,x) :   
-	  if x in self.nodesto :
-		return self.nodesto[x]
-#	  print >> sys.stderr, "Nodes to ",x
-          ret=set([x])
-          for i in self.inputs[x] :
-             ret.update(self.allNodesTo(i))
-          for i in self.selections[x] :
-             ret.update(self.allNodesTo(i))
-	  #this is cached because it cannot change
-	  self.nodesto[x]=ret;
+    def allNodesTo(self,nodes) :   
+	  ret=set()
+	  for x in nodes:
+	      if x in self.nodesto :
+		  toset=self.nodesto[x]
+	      else:
+#	          print >> sys.stderr, "Nodes to ",x
+                  toset=set([x])
+                  toset.update(self.allNodesTo(self.inputs[x]))
+                  toset.update(self.allNodesTo(self.selections[x]))
+	          #this is cached because it cannot change
+	          self.nodesto[x]=toset;
+              ret.update(toset)
           return ret
-    def allNodesFromWithWhiteList(self,x,wl,cache={}) :
+    def allNodesFromWithWhiteList(self,nodes,wl,cache={}) :
           #cache is local because it changes with more defines
-          if x in cache :
-             return cache[x]
-#          print >> sys.stderr, "Nodes from ",x
-          children=set([n for n in self.inputs.keys() if ((x in self.inputs[n]+self.selections[n]) and (n in wl))])
-          ret=set(children)
-          for c in children :
-             ret.update(self.allNodesFromWithWhiteList(c,wl,cache))
-          cache[x]=ret
+	  ret=set()
+	  for x in nodes :
+              if x in cache :
+                  childrenset=cache[x]
+#	          print >> sys.stderr, "Nodes from ",x
+	      else:
+                  children=set([n for n in self.inputs.keys() if ((x in self.inputs[n]+self.selections[n]) and (n in wl))])
+                  childrenset=set(children)
+                  childrenset.update(self.allNodesFromWithWhiteList(children,wl,cache))
+                  cache[x]=childrenset
+	      ret.update(childrenset)
           return ret
 
 
-    def allNodesFrom(self,x,cache={}) :   
+    def allNodesFrom(self,nodes,cache={}) :   
 	  #cache is local because it changes with more defines
-	  if x in cache :
-	     return cache[x]
-	  print >> sys.stderr, "Nodes from ",x
-          children=set([n for n in self.inputs.keys() if x in self.inputs[n]+self.selections[n]])
-	  ret=set(children)
-	  for c in children :
-             ret.update(self.allNodesFrom(c,cache))
-	  cache[x]=ret
+	  ret=set()
+	  for x in nodes :
+	      if x in cache :
+	          childrenset=cache[x]
+	      else :
+#	          print >> sys.stderr, "Nodes from ",x
+                  children=set([n for n in self.inputs.keys() if x in self.inputs[n]+self.selections[n]])
+	          childrenset=set(children)
+                  childrenset.update(self.allNodesFrom(children,cache))
+	          cache[x]=childrenset
+	      ret.update(childrenset)
           return ret
 
-    def findAffectedNodesForVariationOnTarget(self,name,target):
-	 nodesTo= [x for x in self.allNodesTo(target) if x not in self.variations[name]["exceptions"] ]
-	 return [x for x in self.allNodesFromWithWhiteList(self.variations[name]["original"],nodesTo) if x in nodesTo]
+    def findAffectedNodesForVariationOnTargets(self,name,targets):
+	 nodesTo=set()
+ 	 nodesTo.update([x for x in self.allNodesTo(targets) if x not in self.variations[name]["exceptions"] ])
+#         print  >> sys.stderr, "VarNodesTo:",nodesTo
+	 return [x for x in self.allNodesFromWithWhiteList([self.variations[name]["original"]],nodesTo) if x in nodesTo]
    
     def createVariationBranch(self,name,target):
-	 print >> sys.stderr, "Find affected"
-         affected=(self.findAffectedNodesForVariationOnTarget(name,target))
-	 print >> sys.stderr, "Found affected"
+#	 print >> sys.stderr, "Find affected"
+         affected=(self.findAffectedNodesForVariationOnTargets(name,target))
+#	 print >> sys.stderr, "Found affected\n", affected
 	 affected.sort(key=lambda x: self.validCols.index(x)) #keep original sorting
          replacementTable=[(x,x+"__syst__"+name) for x in affected]
          for x,x_syst in replacementTable:
