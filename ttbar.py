@@ -27,19 +27,32 @@ flow.Define("LooseMuon_pid","(LooseMuon_pt*0)+13")
 flow.Define("LooseEle_pid","(LooseEle_pt*0)+11")
 flow.MergeCollections("Lepton",["LooseMuon","LooseEle"])
 
+flow.Define("JetLepPair","Combinations(Jet_pt,Lepton_pt)")
+flow.Define("JetLepPair_dr","vector_map(P4DELTAR,Take(Jet_p4,JetLepPair[0]),Take(Lepton_p4,JetLepPair[1]))")
+flow.Define("Jet_lepDr","matrix_map(nJet,nLepton,1,[](const ROOT::VecOps::RVec<float> & v) {return -v.size()>0?Max(-v):-99;},JetLepPair_dr)")
+flow.Define("Lepton_jetDr","matrix_map(nJet,nLepton,0,[](const ROOT::VecOps::RVec<float> & v) {return -v.size()>0?Max(-v):-99;},JetLepPair_dr)")
+flow.Define("Jet_lepIdx","matrix_map(nJet,nLepton,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):-1;},JetLepPair_dr)")
+flow.Define("Lepton_jetIdx2","matrix_map(nJet,nLepton,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):-1;},JetLepPair_dr)")
+
 # * Jet select/cleaning against loose leptons , jet pt > 25 , jet id
 flow.DefaultConfig(jetPtCut=25,jetIdCut=0,jetPUIdCut=0)
 flow.SubCollection("CleanJet","Jet",'''
  Jet_pt > jetPtCut &&
  Jet_jetId > jetIdCut &&
  Jet_puId > jetPUIdCut &&
- (Jet_muonIdx1 == -1 || Take(Muon_iso,Jet_muonIdx1) > muIsoCut || Take(Muon_id,Jet_muonIdx1) > muIdCut)&&
- (Jet_muonIdx2 == -1 || Take(Muon_iso,Jet_muonIdx2) > muIsoCut || Take(Muon_id,Jet_muonIdx2) > muIdCut)&&
- (Jet_electronIdx1 == -1 || Take(Electron_iso,Jet_electronIdx1) > eIsoCut || Take(Electron_id,Jet_electronIdx1) > eIdCut)&&
- (Jet_electronIdx2 == -1 || Take(Electron_iso,Jet_electronIdx2) > eIsoCut || Take(Electron_id,Jet_electronIdx2) > eIdCut)
+ Jet_lepIdx==-1
+//those are currently not safe Takes because of the -1
+// (Jet_muonIdx1 == -1 || Take(Muon_iso,abs(Jet_muonIdx1)) > muIsoCut || Take(Muon_id,abs(Jet_muonIdx1)) > muIdCut)&&
+// (Jet_muonIdx2 == -1 || Take(Muon_iso,abs(Jet_muonIdx2)) > muIsoCut || Take(Muon_id,abs(Jet_muonIdx2)) > muIdCut)&&
+// (Jet_electronIdx1 == -1 || Take(Electron_iso,abs(Jet_electronIdx1)) > eIsoCut || Take(Electron_id,abs(Jet_electronIdx1)) > eIdCut)&&
+// (Jet_electronIdx2 == -1 || Take(Electron_iso,abs(Jet_electronIdx2)) > eIsoCut || Take(Electron_id,abs(Jet_electronIdx2)) > eIdCut)
 ''')
 flow.Define("CleanJet_btag","Jet_btagCSVV2") #this allows to later just use "btag" and to study changes of btag algorithm
 flow.Define("CleanJet_p4","@p4v(CleanJet)")
+flow.Define("Jet_p4","@p4v(Jet)")
+
+
+
 # * Compute event variables using selected cleaned jets
 flow.Define("JetSum_p4","std::accumulate(CleanJet_p4.begin(), CleanJet_p4.end(), ROOT::Math::PtEtaPhiMVector())") #Feature request=> Sum with stardvalue
 flow.Define("LeptonSum_p4","std::accumulate(Lepton_p4.begin(), Lepton_p4.end(), ROOT::Math::PtEtaPhiMVector())") #Feature request=> Sum with stardvalue
@@ -139,8 +152,8 @@ flow.Selection("WControl","nTightLepton==1 && nLepton ==1 & nMediumBTagged==0")
 
 
 #define some event weights
-flow.Define("SelectedJet_btagWeight","vector_map(btagWeight,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
-flow.Define("btagEventWeight","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
+flow.Define("CleanJet_btagWeight","vector_map(btagWeight,CleanJet_btag,CleanJet_pt,CleanJet_eta)")
+flow.Define("btagEventWeight","std::accumulate(CleanJet_btagWeight.begin(),CleanJet_btagWeight.end(),1, std::multiplies<double>())")
 flow.AddDefaultWeight("genWeight")
 flow.AddDefaultWeight("btagEventWeight")
 
@@ -153,14 +166,14 @@ flow.AddWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not 
 
 #create btag systematics
 #this should be simplified
-flow.Define("SelectedJet_btagWeight_up","vector_map(btagWeightUp,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
-flow.Define("btagEventWeightUp","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
-flow.Systematic("BTagUp","SelectedJet_btagWeight","SelectedJet_btagWeight_up")
+flow.Define("CleanJet_btagWeight_up","vector_map(btagWeightUp,CleanJet_btag,CleanJet_pt,CleanJet_eta)")
+flow.Define("btagEventWeightUp","std::accumulate(CleanJet_btagWeight.begin(),CleanJet_btagWeight.end(),1, std::multiplies<double>())")
+flow.Systematic("BTagUp","CleanJet_btagWeight","CleanJet_btagWeight_up")
 flow.createVariationBranch("BTagUp","defaultWeight")
-for x in  flow.validCols :
-    if x[:len("defaultWeight")]=="defaultWeight" :
-	if x!="defaultWeight":
-		flow.AddWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
+#for x in  flow.validCols :
+#    if x[:len("defaultWeight")]=="defaultWeight" :
+#	if x!="defaultWeight":
+#		flow.AddWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
 
 #Define Systematic variations
 flow.Define("Muon_pt_scaleUp","Muon_pt*1.01") #this should be protected against systematic variations
@@ -168,7 +181,7 @@ flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
-for i in range(50):
+for i in range(1):
   flow.Define("Jet_pt_JEC%s"%i,"Jet_pt*(1.+(%s-24.5)/100.)"%i)
   flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
@@ -178,11 +191,11 @@ for i in range(50):
 #    * MHT, HT, MET, rho, tkmet, nPVs
 #    * Top and W mass in regions where it makes sense
 #    * Z(dilepton) mass in regions where it makes sense
-colsToPlot=["MHT","HT","Z_mass"]
+colsToPlot=["nJet","nLepton"]#MHT","HT","Z_mass"]
 
 
 #TODO: multiple targets
-for i in range(50):
+for i in range(1):
    print >> sys.stderr, "JEC",i
    flow.createVariationBranch("JEC%s"%i,"Z_mass")
   
@@ -200,6 +213,11 @@ auto Argmax(const type & v){
  return ROOT::VecOps::Reverse(ROOT::VecOps::Argsort(v))[0];
 }
 
+template <typename type>
+auto Max(const type & v){
+ return v[ROOT::VecOps::Reverse(ROOT::VecOps::Argsort(v))[0]];
+}
+
 template <typename type, typename Vec,typename... OtherVecs>
 auto vector_map_t(const Vec & v,  const OtherVecs &... args) {
   ROOT::VecOps::RVec<type> res(v.size());
@@ -213,6 +231,21 @@ auto vector_map(func f, const Vec & v,  const OtherVecs &... args) {
   for(size_t i=0;i<v.size(); i++) res[i]=f(v[i],args[i]...);
   return res;
 }
+
+template <typename func, typename Vec>
+auto matrix_map(size_t xsize, size_t ysize, size_t axis, func f, const Vec & v) {
+  ROOT::VecOps::RVec<decltype(f(std::declval<Vec>()))> res(axis==1?xsize:ysize );
+  for(size_t i=0;i<res.size(); i++){
+	Vec part(axis==0?xsize:ysize);
+  	for(size_t j=0;j<part.size(); j++) {
+	   part[j]=v[axis==1?(i*ysize+j):(i+j*ysize)];
+
+	}
+	res[i]=f(part);
+  }
+  return res;
+}
+
 
 
 /*template <typename func, typename Vec,typename... OtherVecs>
@@ -250,7 +283,7 @@ return v;
 
 
 #define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
-#define RETURN return 
+#define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
 ''' 
 print >> sys.stderr, "Number of known columns", len(flow.validCols)
 #flow.printRDFCpp(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
@@ -259,7 +292,7 @@ for x in colsToPlot :
 
 
 
-flow.printRDFCpp(colsToPlot,debug=False)
+flow.printRDFCpp(colsToPlot+flow.weights.keys()+["Jet_lepDr","Lepton_jetDr","Jet_lepIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_jetIdx2","Lepton_jetIdx"],debug=False)
 #["defaultWeight","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"]+flow.weights.keys(),debug=False)
 
 
