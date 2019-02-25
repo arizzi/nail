@@ -271,6 +271,7 @@ class SampleProcessing:
 	    else:
 	  	    print 'auto %s=toplevel.Histo1D("%s");'%(t,t)
 
+
     def printRDFCpp(self,to,debug=False):
 
         toprint=set([x for t in to for x in self.allNodesTo([t])])
@@ -338,6 +339,14 @@ int main(int argc, char** argv)
    *SBClassifier;
    s.Stop();
    std::cout << "elapsed time: " << s.RealTime() << "s" << std::endl;*/
+   auto fff=TFile::Open("test.root","recreate");
+'''
+        for t in to :
+	   if t in self.histos:
+	  	    print '%s->Write();'%(t)
+	print '''
+   fff->Write();  
+   fff->Close();
    return 0;
 }
 '''

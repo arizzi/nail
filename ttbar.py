@@ -90,10 +90,11 @@ flow.Distinct("JJ","CleanJet")
 flow.Selection("oneJets","nCleanJet>=1")
 flow.Selection("twoJets","nCleanJet>=2")
 #    * Closest to W mass
-flow.TakePair("JJBestWMass","CleanJet","JJ","Argmax(-abs(MemberMap((JJPair0_p4+JJPair1_p4),M() )-80.4))",requires=["twoJets"])
+flow.TakePair("JJBestWMass","CleanJet","JJ","Argmax(-abs(MemberMap((JJ0_p4+JJ1_p4),M() )-80.4))",requires=["twoJets"])
+flow.Define("JJBestWMass_mass","(JJBestWMass0_p4+JJBestWMass1_p4).M()")
 #    * Minimizing (Mjj-Mw)**2/(20)**2 + j1_btag+j2_btag (proxy for an actual likelihood) 
-flow.TakePair("JJBestLike","CleanJet","JJ","Argmax(-(pow(MemberMap((JJPair0_p4+JJPair1_p4),M() )-80.4,2)/400.)-JJPair0_btag-JJPair1_btag)",requires=["twoJets"])
-
+flow.TakePair("JJBestLike","CleanJet","JJ","Argmax(-(pow(MemberMap((JJ0_p4+JJ1_p4),M() )-80.4,2)/400.)-JJ0_btag-JJ1_btag)",requires=["twoJets"])
+flow.Define("JJBestLike_mass","(JJBestLike0_p4+JJBestLike1_p4).M()")
 # * Define B tagged jets
 #    * Tight tagged
 flow.DefaultConfig(tightOp=0.9,mediumOp=0.5)
@@ -167,7 +168,7 @@ flow.AddDefaultWeight("btagEventWeight")
 #Systematic weights
 flow.AddWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
 #this is not obvious as N replicas can change... think about it
-#flow.AddWeightArray("LHEPdfWeight",30,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
+flow.AddWeightArray("LHEPdfWeight",100,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
 
 
 #create btag systematics
@@ -176,6 +177,8 @@ flow.Define("CleanJet_btagWeight_up","vector_map(btagWeightUp,CleanJet_btag,Clea
 flow.Define("btagEventWeightUp","std::accumulate(CleanJet_btagWeight.begin(),CleanJet_btagWeight.end(),1, std::multiplies<double>())")
 flow.Systematic("BTagUp","CleanJet_btagWeight","CleanJet_btagWeight_up")
 flow.createVariationBranch("BTagUp",["defaultWeight"])
+
+#takes all syst variations of defaultWeight
 for x in  flow.validCols :
     if x[:len("defaultWeight")]=="defaultWeight" :
 	if x!="defaultWeight":
@@ -187,7 +190,7 @@ flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
-for i in range(2):
+for i in range(50):
   flow.Define("Jet_pt_JEC%s"%i,"Jet_pt*(1.+(%s-24.5)/100.)"%i)
   flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
@@ -197,16 +200,19 @@ for i in range(2):
 #    * MHT, HT, MET, rho, tkmet, nPVs
 #    * Top and W mass in regions where it makes sense
 #    * Z(dilepton) mass in regions where it makes sense
-colsToPlot=["nJet","nLepton","MHT","HT","Z_mass"]
+colsToPlot=["nJet","nLepton","MHT","HT","Z_mass","OSOFHM_mass","OSSFHM_mass","JJBestLike_mass","JJBestWMass_mass"]
+for attr in ["_pt","_eta"]:
+  for coll in ["LooseMuon","TightLepton","LooseEle","CleanJet"]:
+   colsToPlot.append(coll+attr)
 
 
-#TODO: multiple targets
-for i in range(2):
+for i in range(50):
    print >> sys.stderr, "JEC",i
    flow.createVariationBranch("JEC%s"%i,colsToPlot)
-  
 flow.createVariationBranch("MuScaleUp",colsToPlot)
 flow.createVariationBranch("MuScaleDown",colsToPlot)
+
+
 
 colsToPlotWithSyst=[]
 for c in colsToPlot :
