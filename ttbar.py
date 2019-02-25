@@ -182,7 +182,7 @@ for i in range(2):
 #    * MHT, HT, MET, rho, tkmet, nPVs
 #    * Top and W mass in regions where it makes sense
 #    * Z(dilepton) mass in regions where it makes sense
-colsToPlot=["nJet","nLepton"]#MHT","HT","Z_mass"]
+colsToPlot=["nJet","nLepton","MHT","HT","Z_mass"]
 
 
 #TODO: multiple targets
@@ -210,7 +210,7 @@ for x in colsToPlot :
 
 
 
-flow.printRDFCpp(colsToPlot+flow.weights.keys()+["Jet_LeptonDr","Lepton_JetDr","Jet_LeptonPid","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"],debug=False)
+flow.printRDFCpp(colsToPlot+flow.weights.keys()+["Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"],debug=False)
 #["defaultWeight","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"]+flow.weights.keys(),debug=False)
 
 
