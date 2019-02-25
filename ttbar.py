@@ -27,12 +27,9 @@ flow.Define("LooseMuon_pid","(LooseMuon_pt*0)+13")
 flow.Define("LooseEle_pid","(LooseEle_pt*0)+11")
 flow.MergeCollections("Lepton",["LooseMuon","LooseEle"])
 
-flow.Define("JetLepPair","Combinations(Jet_pt,Lepton_pt)")
-flow.Define("JetLepPair_dr","vector_map(P4DELTAR,Take(Jet_p4,JetLepPair[0]),Take(Lepton_p4,JetLepPair[1]))")
-flow.Define("Jet_lepDr","matrix_map(nJet,nLepton,1,[](const ROOT::VecOps::RVec<float> & v) {return -v.size()>0?Max(-v):-99;},JetLepPair_dr)")
-flow.Define("Lepton_jetDr","matrix_map(nJet,nLepton,0,[](const ROOT::VecOps::RVec<float> & v) {return -v.size()>0?Max(-v):-99;},JetLepPair_dr)")
-flow.Define("Jet_lepIdx","matrix_map(nJet,nLepton,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):-1;},JetLepPair_dr)")
-flow.Define("Lepton_jetIdx2","matrix_map(nJet,nLepton,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):-1;},JetLepPair_dr)")
+#Match jets to Leptons
+flow.Define("Jet_p4","@p4v(Jet)")
+flow.MatchDeltaR("Jet","Lepton",embed=(["pt","pid"],[]))
 
 # * Jet select/cleaning against loose leptons , jet pt > 25 , jet id
 flow.DefaultConfig(jetPtCut=25,jetIdCut=0,jetPUIdCut=0)
@@ -40,16 +37,10 @@ flow.SubCollection("CleanJet","Jet",'''
  Jet_pt > jetPtCut &&
  Jet_jetId > jetIdCut &&
  Jet_puId > jetPUIdCut &&
- Jet_lepIdx==-1
-//those are currently not safe Takes because of the -1
-// (Jet_muonIdx1 == -1 || Take(Muon_iso,abs(Jet_muonIdx1)) > muIsoCut || Take(Muon_id,abs(Jet_muonIdx1)) > muIdCut)&&
-// (Jet_muonIdx2 == -1 || Take(Muon_iso,abs(Jet_muonIdx2)) > muIsoCut || Take(Muon_id,abs(Jet_muonIdx2)) > muIdCut)&&
-// (Jet_electronIdx1 == -1 || Take(Electron_iso,abs(Jet_electronIdx1)) > eIsoCut || Take(Electron_id,abs(Jet_electronIdx1)) > eIdCut)&&
-// (Jet_electronIdx2 == -1 || Take(Electron_iso,abs(Jet_electronIdx2)) > eIsoCut || Take(Electron_id,abs(Jet_electronIdx2)) > eIdCut)
+ (Jet_LeptonIdx==-1 || Jet_LeptonDr > 0.3)
 ''')
 flow.Define("CleanJet_btag","Jet_btagCSVV2") #this allows to later just use "btag" and to study changes of btag algorithm
 flow.Define("CleanJet_p4","@p4v(CleanJet)")
-flow.Define("Jet_p4","@p4v(Jet)")
 
 
 
@@ -181,7 +172,7 @@ flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
-for i in range(1):
+for i in range(2):
   flow.Define("Jet_pt_JEC%s"%i,"Jet_pt*(1.+(%s-24.5)/100.)"%i)
   flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
@@ -195,7 +186,7 @@ colsToPlot=["nJet","nLepton"]#MHT","HT","Z_mass"]
 
 
 #TODO: multiple targets
-for i in range(1):
+for i in range(2):
    print >> sys.stderr, "JEC",i
    flow.createVariationBranch("JEC%s"%i,"Z_mass")
   
@@ -207,83 +198,10 @@ print '''
 #include <ROOT/RVec.hxx>
 #include "Math/Vector4D.h"
 #include <ROOT/RDataFrame.hxx>
-
-template <typename type>
-auto Argmax(const type & v){
- return ROOT::VecOps::Reverse(ROOT::VecOps::Argsort(v))[0];
-}
-
-template <typename type>
-auto Max(const type & v){
- return v[ROOT::VecOps::Reverse(ROOT::VecOps::Argsort(v))[0]];
-}
-
-template <typename type, typename Vec,typename... OtherVecs>
-auto vector_map_t(const Vec & v,  const OtherVecs &... args) {
-  ROOT::VecOps::RVec<type> res(v.size());
-  for(size_t i=0;i<v.size(); i++) res[i]=type(v[i],args[i]...);
-  return res;
-}
-
-template <typename func, typename Vec,typename... OtherVecs>
-auto vector_map(func f, const Vec & v,  const OtherVecs &... args) {
-  ROOT::VecOps::RVec<decltype(f(std::declval<typename Vec::value_type>(),std::declval<typename OtherVecs::value_type>()...))> res(v.size());
-  for(size_t i=0;i<v.size(); i++) res[i]=f(v[i],args[i]...);
-  return res;
-}
-
-template <typename func, typename Vec>
-auto matrix_map(size_t xsize, size_t ysize, size_t axis, func f, const Vec & v) {
-  ROOT::VecOps::RVec<decltype(f(std::declval<Vec>()))> res(axis==1?xsize:ysize );
-  for(size_t i=0;i<res.size(); i++){
-	Vec part(axis==0?xsize:ysize);
-  	for(size_t j=0;j<part.size(); j++) {
-	   part[j]=v[axis==1?(i*ysize+j):(i+j*ysize)];
-
-	}
-	res[i]=f(part);
-  }
-  return res;
-}
-
-
-
-/*template <typename func, typename Vec,typename... OtherVecs>
-auto matrix_map(shape, int axis,func f, const Vec & v,  const OtherVecs &... args) {
-
-}*/
-
-auto pt(const ROOT::Math::PtEtaPhiMVector &i){
- return i.pt();
-}
-
-auto mass(const ROOT::Math::PtEtaPhiMVector &i){
- return i.M();
-}
-
-float btagWeight(float csv,float pt,float eta){
- return 1.01;
-}
-float btagWeightUp(float csv,float pt,float eta){
- return 1.03;
-}
-
-float efficiency(float pt,float eta,int pid){
- if(pid==11) return 0.99;
- if(pid==13) return 0.92;
-}
-template <typename T>
-ROOT::VecOps::RVec<T> Concat(const ROOT::VecOps::RVec<T> & v1,  const ROOT::VecOps::RVec<T> & v2){
-ROOT::VecOps::RVec<T> v;
-for(auto i:v1) {v.push_back(i);}
-for(auto i:v2) {v.push_back(i);}
-return v;
-} 
-
-
-
+#include "helpers.h"
 #define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
 #define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
+
 ''' 
 print >> sys.stderr, "Number of known columns", len(flow.validCols)
 #flow.printRDFCpp(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
@@ -292,7 +210,7 @@ for x in colsToPlot :
 
 
 
-flow.printRDFCpp(colsToPlot+flow.weights.keys()+["Jet_lepDr","Lepton_jetDr","Jet_lepIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_jetIdx2","Lepton_jetIdx"],debug=False)
+flow.printRDFCpp(colsToPlot+flow.weights.keys()+["Jet_LeptonDr","Lepton_JetDr","Jet_LeptonPid","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"],debug=False)
 #["defaultWeight","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"]+flow.weights.keys(),debug=False)
 
 
