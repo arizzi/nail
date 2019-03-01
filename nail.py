@@ -23,7 +23,7 @@ class SampleProcessing:
 	df=ROOT.RDataFrame("Events",filename)
 	dftypes={x[0]:df.GetColumnType(x[0]) for x in allbranches}
         self.init(name,allbranches,dftypes) 	
-
+	self.defFN=filename
     def init(self,name,cols,dftypes):
 	self.name=name
         self.obs={} 
@@ -302,29 +302,34 @@ int main(int argc, char** argv)
       ROOT::EnableImplicitMT(n_cores);
 
 '''
-        print 'ROOT::RDataFrame rdf("Events","/dev/shm/VBF_HToMuMu_nano2016.root");'
+        print 'ROOT::RDataFrame rdf("Events","%s");'%self.defFN
         rdf="rdf"
 	if debug:
 	   rdf="rdf.Range(1000)"
-        print "auto toplevel ="
+	i=0
+        print "auto rdf0 ="
         for c in cols :
            if c in toprint:
             if c in self.obs or c in self.filters :
-                print '%s.Define("%s",func__%s,{%s})'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]]))
-                rdf=""
-        print ";"
-
+                print '%s.Define("%s",func__%s,{%s});'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]]))
+		rdf="rdf%s"%i
+		i+=1
+		print "auto rdf%s ="%i,
+           #     rdf=""
+        #print ";"
+	print "vector<RResultPtr<TH1D>> histos;"
+	rdflast=rdf
         for t in to :
 	    if t in self.histos:
                 if len(self.selections[t]) > 0 :
-                    print 'auto %s_neededselection=toplevel.Filter("%s");'%(t,'").Filter("'.join(self.selections[t]))
+                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.selections[t]))
 		    rdf="%s_neededselection"%t
                 else:
-		    rdf="toplevel"
-                print 'auto %s=%s.Histo1D("%s","defaultWeight");'%(t,rdf,t)
+		    rdf=rdflast
+                print 'histos.emplace_back(%s.Histo1D({"%s", "%s", 1000, 0, 100},"%s","defaultWeight"));'%(rdf,t,t,t)
 		for w in self.weights :
 		    if self.weights[w]["filter"](t,w):
-	                    print 'auto %s__weight__%s=%s.Histo1D("%s","%s");'%(t,w,rdf,t,w)
+	                    print 'histos.emplace_back(%s.Histo1D({"%s__weight__%s", "%s", 1000, 0, 100},"%s","%s"));'%(rdf,t,w,t,t,w)
 
 	print '''
    auto tr=toplevel.Snapshot("ot", "outputFile.root", {"nJet","nLepton","Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"});
@@ -340,10 +345,14 @@ int main(int argc, char** argv)
    s.Stop();
    std::cout << "elapsed time: " << s.RealTime() << "s" << std::endl;*/
    auto fff=TFile::Open("test.root","recreate");
+   for(auto h : histos) h->Write();
 '''
-        for t in to :
-	   if t in self.histos:
-	  	    print '%s->Write();'%(t)
+#        for t in to :
+#	   if t in self.histos:
+#	  	print '%s->Write();'%(t)
+#		for w in self.weights :
+#		    if self.weights[w]["filter"](t,w):
+#	                    print '%s__weight__%s->Write();'%(t,w)
 	print '''
    fff->Write();  
    fff->Close();
