@@ -34,8 +34,8 @@ class SampleProcessing:
 	self.variations={}
 	self.conf={}
 	self.histos={}
-	self.weights={}
-	self.defweights=[]
+	self.variationWeights={} #variation weights
+	self.centralWeights={} #default weights for each selection
 	self.regexps=[]
 	self.validCols=[x[0] for x in cols]
 	self.inputTypes={x[0]:x[1] for x in cols}
@@ -54,7 +54,7 @@ class SampleProcessing:
 	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::PtEtaPhiMVector(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
 	self.AddCodeRegex(("@p4v\(([a-zA-Z0-9_]+)\)","vector_map_t<ROOT::Math::PtEtaPhiMVector>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
 	self.nodesto={}
-	self.Define("defaultWeight","1.")
+#	self.Define("defaultWeight","1.")
 
     def AddCodeRegex(self,regexp):
 	self.regexps.append(regexp)
@@ -133,9 +133,10 @@ class SampleProcessing:
 
     def Define(self,name,code,inputs=[],requires=[]):
 	print >> sys.stderr, name
-	if name not in self.validCols or name=="defaultWeight":
-	    if name == "defaultWeight" and name in self.validCols:
-		self.validCols.remove(name)
+	if name not in self.validCols :
+#	if name not in self.validCols or name[:len(defaultWeight)]=="defaultWeight":
+#	    if name[:len(defaultWeight)] == "defaultWeight" and name in self.validCols:
+#		self.validCols.remove(name)
 	    self.validCols.append(name)
 	    pcode=self.preprocess(code)
             self.obs[name]={}
@@ -180,30 +181,75 @@ class SampleProcessing:
         self.variations[name]["modified"]=modified
 	self.variations[name]["exceptions"]=exceptions
 
-    #FIXME TODO add weights only in selections (and check dependencies)
-    def AddDefaultWeight(self,name,selections=[]):
-	if not name in self.defweights:
-	    self.defweights.append(name)
-	    self.Define("defaultWeight","*".join(self.defweights))
+    def CentralWeight(self,name,selections=[""]):
+	for s in selections :
+	   missing=[x for x in self.selections[name] if x not in self.selections[s] ]
+	   if len(missing) > 0 :
+		print "Cannot add weight",name,"on selection",s,"because",name,"requires the following additional selections"
+		print missing
+		exit(1)
+	   if s not in self.centralWeights:
+		self.centralWeights[s]=[]
+	   self.centralWeights[s].append(name)
 
-    def AddWeight(self,name,code="",filt=lambda x,y: True,nodefault=False):
-	if code:
-            if nodefault :
-		self.Define(name,"%s"%code)
-	    else:
-		self.Define(name,"(%s)*defaultWeight"%code)
-	self.weights[name]={}
-	self.weights[name]["filter"]=filt
-
-    def AddWeightArray(self,name,nentries=1,filt=lambda x,y: True):
-	for i in range(nentries):
-		self.AddWeight("%s%s"%(name,i),"%s[%s]"%(name,i),filt=filt)
+    def VariationWeight(self,name,replacing="",filt=lambda hname,wname : "__syst__" not in hname):
+        self.variationWeights[name]={}
+        self.variationWeights[name]["replacing"]=replacing
+        self.variationWeights[name]["filter"]=filt
+	     
+    def VariationWeightArray(self,name,nentries=1,replacing="",filt=lambda hname,wname : "__syst__" not in hname):
+        for i in range(nentries):
+		self.Define("%s%s"%(name,i),"%s[%s]"%(name,i))
+                self.VariationWeight("%s%s"%(name,i),replacing,filt)
 
     def Histo(self,name,binHint=None):
 	self.histos[name]={}
 	self.histos["bin"]=binHint
 
-    
+    def recursiveGetWeights(self,sel):
+	res=set()
+	if sel in self.centralWeights :
+	    res.update(self.centralWeights[sel])
+	for dep in self.selections[sel] :
+	    res.update(self.recursiveGetWeights(dep))
+	return res
+
+    def sortedUniqueColumns(self,cols):
+	return sorted(list(set(cols)),key=lambda c:self.validCols.index(c))
+	
+    def selSetName(self,sels):
+	sels=self.sortedUniqueColumns(sels)
+	return "_".join(sels)
+
+    def replaceWeightWithVariation(self,variation,weights,hist="" ):
+	v=self.variationWeights[variation]
+	if v["replacing"] == "" and v["filter"](variation,hist) :
+	   return list(weights)+[variation]
+	res=[]
+	for w in weights:
+	   if w==v["replacing"] and v["filter"](variation,hist) :
+		res.append(variation)
+	   else :
+		res.append(w)
+	return res
+
+
+    def defineWeights(self,selectionsSets):
+	res=[]
+	for name,selections in selectionsSets.iteritems():
+#    name=selSetName(selections)	   
+	    weights=set()
+	    for s in selections:
+	        weights.update(self.recursiveGetWeights(s))
+	    for variation in ["Central"]+self.variationWeights.keys():
+	        replacedWeights=weights
+		if variation != "Central":
+		    replacedWeights=self.replaceWeightWithVariation(variation,weights)
+                self.Define("%sWeight__%s"%(name,variation),"*".join(replacedWeights))
+		res.append("%sWeight__%s"%(name,variation))
+	return res
+   
+
 
     def findCols(self,code) :
 	idx = clang.cindex.Index.create()
@@ -229,52 +275,20 @@ class SampleProcessing:
 	    code=re.sub(s,r,code)
 	return code
 
-    def printRDF(self,to,optimizeFilters=False):
-	#print 'ROOT::RDataFrame rdf("Events","/gpfs/ddn/cms/user/mandorli/Hmumu/CMSSW_9_4_6/src/Skim0/fileSkim2016/VBF_HToMuMu_nano2016.root");'
-	print 'ROOT::RDataFrame rdf("Events","/dev/shm/VBF_HToMuMu_nano2016.root");'
-	print "auto toplevel ="
-	rdf="rdf"
-	if optimizeFilters :
-	    allfilters=set([s for t in to for s in self.selections[t]])
-	    allfiltersinputs=set([i for t in to for s in self.selections[t] for i in self.allNodesTo([s])])
-            filterstring="||".join( ["(%s)"%("&&".join(self.selections[t])) for t in to])
-      	    orderedColumns=[x for x in self.validCols if x in allfiltersinputs] + [x for x in self.validCols if x not in allfiltersinputs]
-	    commonfilters=set(self.selections[to[0]]) if len(to) > 0 else set()
-	    for s in to[1:]:
-	        commonfilters.intersection_update(self.selections[s])
-	
-	#or t in to :
-	#  sels=self.selections[t]
-	#  filters.add('&&'.join(self.selections[t])
-	
-	toprint=set([x for t in to for x in self.allNodesTo([t])])
-	cols=self.validCols if not optimizeFilters else orderedColumns
-	for c in cols :
-           if c in toprint:
-	    if c in self.obs or c in self.filters :
-	        print '%s.Define("%s","%s")'%(rdf,c,self.code[c])
-		if optimizeFilters :
-		    if c in allfilters :
-			allfilters.remove(c)
-		    if len(allfilters) == 0 and filterstring!="":
-			print '%s.Filter("%s")'%(rdf,filterstring)
-			filterstring=""
-		    if c in commonfilters :
-		        print '%s.Filter("%s")'%(rdf,c)
-		
-		rdf=""
-	print ";"
-        for t in to :
-	    if len(self.selections[t]) > 0 :
-		    
-	  	    print 'auto %s=toplevel.Filter("%s").Histo1D("%s");'%(t,'").Filter("'.join(self.selections[t]),t)
-	    else:
-	  	    print 'auto %s=toplevel.Histo1D("%s");'%(t,t)
-
-
-    def printRDFCpp(self,to,debug=False):
-
-        toprint=set([x for t in to for x in self.allNodesTo([t])])
+    def printRDFCpp(self,to,debug=False,outname="out.C"):
+	sels={self.selSetName(self.selections[x]):self.sortedUniqueColumns(self.selections[x]) for x in to}
+	weights=self.defineWeights(sels)
+	f=open(outname,"w")
+	f.write('''
+#include <Math/VectorUtil.h>
+#include <ROOT/RVec.hxx>
+#include "Math/Vector4D.h"
+#include <ROOT/RDataFrame.hxx>
+#include "helpers.h"
+#define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
+#define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
+''')
+        toprint=set([x for t in to+weights for x in self.allNodesTo([t])])
         cols=self.validCols # if not optimizeFilters else orderedColumns
         for c in cols :
            if c in toprint:
@@ -288,11 +302,11 @@ class SampleProcessing:
 		debugcode="\n"
 		if debug :
 			debugcode='std::cout << "%s" << std::endl;\n'%c
-		print "auto func__%s(%s) { %s return %s; }" %(c,inputs,debugcode,self.code[c])
-		print "using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;"%(c,c)
+		f.write("auto func__%s(%s) { %s return %s; }\n" %(c,inputs,debugcode,self.code[c]))
+		f.write("using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;\n"%(c,c))
 		self.dftypes[c]="type__%s"%(c)
 
-	print '''
+	f.write('''
 int main(int argc, char** argv)
 {
    auto n_cores = 0;
@@ -301,38 +315,60 @@ int main(int argc, char** argv)
    if (n_cores > 0)
       ROOT::EnableImplicitMT(n_cores);
 
-'''
-        print 'ROOT::RDataFrame rdf("Events","%s");'%self.defFN
+''')
+        f.write('ROOT::RDataFrame rdf("Events","%s");\n'%self.defFN)
         rdf="rdf"
 	if debug:
 	   rdf="rdf.Range(1000)"
 	i=0
-        print "auto rdf0 ="
+        f.write("auto rdf0 =")
         for c in cols :
            if c in toprint:
             if c in self.obs or c in self.filters :
-                print '%s.Define("%s",func__%s,{%s});'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]]))
+                f.write('%s.Define("%s",func__%s,{%s});\n'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]])))
 		rdf="rdf%s"%i
 		i+=1
-		print "auto rdf%s ="%i,
+		f.write("auto rdf%s ="%i)
            #     rdf=""
-        #print ";"
-	print "vector<RResultPtr<TH1D>> histos;"
+        f.write(rdf+";\n")
+ 	f.write("auto toplevel=%s;\n"%rdf)
+	f.write("std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;\n")
 	rdflast=rdf
+	selsprinted=[]
+	selname=""
         for t in to :
 	    if t in self.histos:
                 if len(self.selections[t]) > 0 :
-                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.selections[t]))
-		    rdf="%s_neededselection"%t
+#                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.selections[t]))
+		    selname=self.selSetName(self.selections[t])
+		    if selname not in selsprinted :
+ 		        f.write('auto selection_%s=%s.Filter("%s","%s")'%(selname,rdflast,self.selections[t][0],self.selections[t][0]))
+ 	 	        for s in self.selections[t][1:]:
+                            f.write('.Filter("%s","%s")'%(s,s))
+		        f.write(";\n")
+			selsprinted.append(selname)
+		    rdf="selection_%s"%selname
                 else:
 		    rdf=rdflast
-                print 'histos.emplace_back(%s.Histo1D({"%s", "%s", 1000, 0, 100},"%s","defaultWeight"));'%(rdf,t,t,t)
-		for w in self.weights :
-		    if self.weights[w]["filter"](t,w):
-	                    print 'histos.emplace_back(%s.Histo1D({"%s__weight__%s", "%s", 1000, 0, 100},"%s","%s"));'%(rdf,t,w,t,t,w)
+                f.write('histos.emplace_back(%s.Histo1D({"%s", "%s", 1000, 0, 100},"%s","%sWeight__Central"));\n'%(rdf,t,t,t,selname))
+		for w in self.variationWeights :
+		    if self.variationWeights[w]["filter"](t,w):
+			    ww="%sWeight__%s"%(selname,w)
+	                    f.write('histos.emplace_back(%s.Histo1D({"%s__weight__%s", "%s", 1000, 0, 100},"%s","%s"));\n'%(rdf,t,w,t,t,ww))
 
-	print '''
-   auto tr=toplevel.Snapshot("ot", "outputFile.root", {"nJet","nLepton","Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"});
+	f.write('''
+
+
+
+
+   SBClassifier_neededselection.Report()->Print();
+   auto tr=SBClassifier_neededselection.Snapshot("ot", "outputFile.root", {"nJet","SBClassifier","NSoft2","event","VBFRegion","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx"});
+
+
+
+   //   auto tr=SBClassifier_neededselection.Snapshot("ot", "outputFile.root", {"nJet","SBClassifier"});
+
+   //auto tr=toplevel.Snapshot("ot", "outputFile.root", {"nJet","nLepton","Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"});
    
 /*TStopwatch s;
    SBClassifier.OnPartialResult(0, [&s](TH1D &) {
@@ -346,19 +382,18 @@ int main(int argc, char** argv)
    std::cout << "elapsed time: " << s.RealTime() << "s" << std::endl;*/
    auto fff=TFile::Open("test.root","recreate");
    for(auto h : histos) h->Write();
-'''
+   fff->Write();  
+   fff->Close();
+   return 0;
+}
+''')
+
 #        for t in to :
 #	   if t in self.histos:
 #	  	print '%s->Write();'%(t)
 #		for w in self.weights :
 #		    if self.weights[w]["filter"](t,w):
 #	                    print '%s__weight__%s->Write();'%(t,w)
-	print '''
-   fff->Write();  
-   fff->Close();
-   return 0;
-}
-'''
 
 
 
