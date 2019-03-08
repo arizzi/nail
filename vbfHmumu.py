@@ -118,6 +118,8 @@ flow.Define("SelectedJet_btagWeight","vector_map(btagWeight,SelectedJet_btagCSVV
 flow.Define("btagEventWeight","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
 flow.CentralWeight("genWeight")
 flow.CentralWeight("btagEventWeight")
+flow.Define("muEffWeight","effMu2016(Mu0_pt,Mu0_eta)*effMu2016(Mu1_pt,Mu1_eta)")
+flow.CentralWeight("muEffWeight",["twoOppositeSignMuons"])
 
 
 #Systematic weights
@@ -129,26 +131,28 @@ flow.VariationWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__
 #create btag systematics
 #this should be simplified
 flow.Define("SelectedJet_btagWeight_up","vector_map(btagWeightUp,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
-flow.Define("btagEventWeightUp","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
+#flow.Define("btagEventWeightUp","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
 flow.Systematic("BTagUp","SelectedJet_btagWeight","SelectedJet_btagWeight_up")
 
 flow.createVariationBranch("BTagUp",["btagEventWeight"])
+flow.VariationWeight("btagEventWeight__syst__BTagUP","btagEventWeight")
+
 #or x in  flow.validCols :
 #   if x[:len("defaultWeight")]=="defaultWeight" :
 #if x!="defaultWeight":
 #	flow.AddVariationWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
 
 #Define Systematic variations
-flow.Define("Muon_pt_scaleUp","Muon_pt*1.01") #this should be protected against systematic variations
-flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
+flow.Define("Muon_pt_scaleUp","Muon_pt*1.01f") #this should be protected against systematic variations
+flow.Define("Muon_pt_scaleDown","Muon_pt*0.97f")
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
-for i in range(10):
-  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100."%i)
+for i in range(5):
+  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100.f"%i)
   flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
-for i in range(10):
+for i in range(5):
    print >> sys.stderr, "JEC",i
    flow.createVariationBranch("JEC%s"%i,["SBClassifier"])
   

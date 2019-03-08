@@ -3,8 +3,8 @@ import ROOT
 import sys
 
 
-#flow=SampleProcessing("ttbar","/dev/shm/VBF_HToMuMu_nano2016.root")
-flow=SampleProcessing("ttbar","/scratch/arizzi/TTbar.root")
+flow=SampleProcessing("ttbar","/dev/shm/VBF_HToMuMu_nano2016.root")
+#flow=SampleProcessing("ttbar","/scratch/arizzi/TTbar.root")
 # Toy Analysis for dileptonic and semileptonic ttbar
 # * Loose Lepton selection (requires pt>20, a  Loosflag, relative isolation < 0.25)
 #    * Both electrons and muons
@@ -41,7 +41,7 @@ flow.SubCollection("CleanJet","Jet",'''
  (Jet_LeptonIdx==-1 || Jet_LeptonDr > 0.3)
 ''')
 #flow.Define("CleanJet_btag","CleanJet_mass/100.") #this allows to later just use "btag" and to study changes of btag algorithm
-flow.Define("CleanJet_btag","CleanJet_CSVV2") #this allows to later just use "btag" and to study changes of btag algorithm
+flow.Define("CleanJet_btag","CleanJet_btagCSVV2") #this allows to later just use "btag" and to study changes of btag algorithm
 flow.Define("CleanJet_p4","@p4v(CleanJet)")
 
 

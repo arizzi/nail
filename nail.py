@@ -2,6 +2,7 @@ import ROOT
 import clang.cindex
 import re
 import sys
+
 class AggregatedSample:
     def __init__(self,*args):
       self.samples=list(args)
@@ -24,12 +25,14 @@ class SampleProcessing:
 	dftypes={x[0]:df.GetColumnType(x[0]) for x in allbranches}
         self.init(name,allbranches,dftypes) 	
 	self.defFN=filename
+	self.dupcode=False
     def init(self,name,cols,dftypes):
 	self.name=name
         self.obs={} 
         self.filters={} 
         self.code={} 
         self.inputs={} 
+        self.originals={} 
         self.selections={} 
 	self.variations={}
 	self.conf={}
@@ -70,7 +73,7 @@ class SampleProcessing:
 
     def MergeCollections(self,name,collections,requires=[]):
  	commonCols=set(self.colsForObject(collections[0]))
-	print commonCols
+	#print commonCols
 	for coll in collections[1:] :
 	    commonCols=commonCols.intersection(self.colsForObject(coll))
 	self.Define("n"+name,"+".join(["n"+coll for coll in collections]))
@@ -131,7 +134,7 @@ class SampleProcessing:
 #	print "Not implemented"
 #	pass
 
-    def Define(self,name,code,inputs=[],requires=[]):
+    def Define(self,name,code,inputs=[],requires=[],original=""):
 	print >> sys.stderr, name
 	if name not in self.validCols :
 #	if name not in self.validCols or name[:len(defaultWeight)]=="defaultWeight":
@@ -140,19 +143,21 @@ class SampleProcessing:
 	    self.validCols.append(name)
 	    pcode=self.preprocess(code)
             self.obs[name]={}
+            self.originals[name]=original
             self.code[name]=pcode
-            self.inputs[name]=list(set(self.findCols(pcode)+inputs))
+            self.inputs[name]=sorted(list(set(self.findCols(pcode)+inputs)))
             self.selections[name]=list(set(requires+[y for x in self.inputs[name] if x in self.selections for y in self.selections[x]]))
 	else :
 	    print "Attempt to redefine column", name," => noop"
 
-    def Selection(self,name,code,inputs=[]) :
+    def Selection(self,name,code,inputs=[],original="") :
         if name not in self.validCols :
             self.validCols.append(name)
 	    pcode=self.preprocess(code)
 	    self.filters[name]={}
+            self.originals[name]=original
             self.code[name]=pcode
-            self.inputs[name]=list(set(self.findCols(pcode)))
+            self.inputs[name]=sorted(list(set(self.findCols(pcode)+inputs)))
             self.selections[name]=list(set([y for x in self.inputs[name] if x in self.selections for y in self.selections[x]]))
 
 	else :
@@ -183,7 +188,7 @@ class SampleProcessing:
 
     def CentralWeight(self,name,selections=[""]):
 	for s in selections :
-	   missing=[x for x in self.selections[name] if x not in self.selections[s] ]
+	   missing=[x for x in self.selections[name] if x not in (self.selections[s]+[s] if s != "" else []) ]
 	   if len(missing) > 0 :
 		print "Cannot add weight",name,"on selection",s,"because",name,"requires the following additional selections"
 		print missing
@@ -239,13 +244,18 @@ class SampleProcessing:
 	for name,selections in selectionsSets.iteritems():
 #    name=selSetName(selections)	   
 	    weights=set()
+	    if name=="":
+	        weights.update(self.centralWeights[""])
 	    for s in selections:
 	        weights.update(self.recursiveGetWeights(s))
 	    for variation in ["Central"]+self.variationWeights.keys():
 	        replacedWeights=weights
 		if variation != "Central":
 		    replacedWeights=self.replaceWeightWithVariation(variation,weights)
-                self.Define("%sWeight__%s"%(name,variation),"*".join(replacedWeights))
+		if not replacedWeights:
+	                self.Define("%sWeight__%s"%(name,variation),"1.")
+		else:	
+	                self.Define("%sWeight__%s"%(name,variation),"*".join(replacedWeights))
 		res.append("%sWeight__%s"%(name,variation))
 	return res
    
@@ -279,6 +289,7 @@ class SampleProcessing:
 	sels={self.selSetName(self.selections[x]):self.sortedUniqueColumns(self.selections[x]) for x in to}
 	weights=self.defineWeights(sels)
 	f=open(outname,"w")
+	ftxt=open(outname[:-2]+"-data.txt","w")
 	f.write('''
 #include <Math/VectorUtil.h>
 #include <ROOT/RVec.hxx>
@@ -293,6 +304,7 @@ class SampleProcessing:
         for c in cols :
            if c in toprint:
             if c in self.obs or c in self.filters :
+	      if self.code[c] != "" :
 		inputs=""
 		for i in self.inputs[c]:
 		   if inputs!="":
@@ -314,9 +326,16 @@ int main(int argc, char** argv)
       n_cores = std::atoi(argv[1]);
    if (n_cores > 0)
       ROOT::EnableImplicitMT(n_cores);
+   std::string fname="%s";
+   if(argc > 2)
+     fname=argv[2];
+   std::string out="out";
+   if(argc > 3)
+     out=argv[3];
 
-''')
-        f.write('ROOT::RDataFrame rdf("Events","%s");\n'%self.defFN)
+
+'''%self.defFN)
+        f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
         rdf="rdf"
 	if debug:
 	   rdf="rdf.Range(1000)"
@@ -325,9 +344,14 @@ int main(int argc, char** argv)
         for c in cols :
            if c in toprint:
             if c in self.obs or c in self.filters :
-                f.write('%s.Define("%s",func__%s,{%s});\n'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]])))
+		if self.code[c] != "" :
+	               f.write('%s.Define("%s",func__%s,{%s});\n'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]])))
+		else:
+	               f.write('%s.Define("%s",func__%s,{%s});\n'%(rdf,c,self.originals[c],",".join([ '"%s"'%x for x in self.inputs[c]])))
 		rdf="rdf%s"%i
 		i+=1
+		if debug :
+		   f.write('std::cout << "%s" << std::endl;\n'%rdf);
 		f.write("auto rdf%s ="%i)
            #     rdf=""
         f.write(rdf+";\n")
@@ -347,13 +371,16 @@ int main(int argc, char** argv)
                             f.write('.Filter("%s","%s")'%(s,s))
 		        f.write(";\n")
 			selsprinted.append(selname)
+			#f.write('loadHistograms(%s,"%s",histos);\n'%("selection_%s"%selname,"selection_%s"%selname))
 		    rdf="selection_%s"%selname
                 else:
 		    rdf=rdflast
+		ftxt.write('%s,%s,%s,1000,0,100,%s,%sWeight__Central\n'%(rdf,t,t,t,selname))
                 f.write('histos.emplace_back(%s.Histo1D({"%s", "%s", 1000, 0, 100},"%s","%sWeight__Central"));\n'%(rdf,t,t,t,selname))
 		for w in self.variationWeights :
 		    if self.variationWeights[w]["filter"](t,w):
 			    ww="%sWeight__%s"%(selname,w)
+	                    ftxt.write('%s,%s__weight__%s,%s,1000,0,100,%s,%s\n'%(rdf,t,w,t,t,ww))
 	                    f.write('histos.emplace_back(%s.Histo1D({"%s__weight__%s", "%s", 1000, 0, 100},"%s","%s"));\n'%(rdf,t,w,t,t,ww))
 
 	f.write('''
@@ -361,14 +388,14 @@ int main(int argc, char** argv)
 
 
 
-   SBClassifier_neededselection.Report()->Print();
-   auto tr=SBClassifier_neededselection.Snapshot("ot", "outputFile.root", {"nJet","SBClassifier","NSoft2","event","VBFRegion","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx"});
+   auto tr=selection_twoMuons_twoOppositeSignMuons_twoJets.Snapshot("ot", (out+"Snap.root").c_str(), {"nJet","SBClassifier","NSoft2","event","VBFRegion","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx"});
+   selection_twoMuons_twoOppositeSignMuons_twoJets.Report()->Print();
 
 
 
    //   auto tr=SBClassifier_neededselection.Snapshot("ot", "outputFile.root", {"nJet","SBClassifier"});
 
-   //auto tr=toplevel.Snapshot("ot", "outputFile.root", {"nJet","nLepton","Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"});
+   //auto tr=toplevel.Snapshot("ot", (out+"File.root").c_str(), {"nJet","nLepton","Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"});
    
 /*TStopwatch s;
    SBClassifier.OnPartialResult(0, [&s](TH1D &) {
@@ -380,7 +407,7 @@ int main(int argc, char** argv)
    *SBClassifier;
    s.Stop();
    std::cout << "elapsed time: " << s.RealTime() << "s" << std::endl;*/
-   auto fff=TFile::Open("test.root","recreate");
+   auto fff=TFile::Open((out+"Histos.root").c_str(),"recreate");
    for(auto h : histos) h->Write();
    fff->Write();  
    fff->Close();
@@ -466,11 +493,17 @@ int main(int argc, char** argv)
          replacementTable=[(x,x+"__syst__"+name) for x in affected]
          for x,x_syst in replacementTable:
 
-             ncode=" "+self.code[x]+" "  #FIXME: we should avoid duplicating the code
-             for y,y_syst in replacementTable+[(self.variations[name]["original"],self.variations[name]["modified"])]:
+	     ncode=""
+	     if self.dupcode :
+               ncode=" "+self.code[x]+" "  #FIXME: we should avoid duplicating the code
+               for y,y_syst in replacementTable+[(self.variations[name]["original"],self.variations[name]["modified"])]:
 	         regBound="([^a-zA-Z0-9_])"
                  reg=regBound+y+regBound
                  ncode=re.sub(reg,"\\1"+y_syst+"\\2",ncode)
+	     	
+	     originalinputs=self.inputs[x]
+	     repdict={c[0]:c[1] for c in replacementTable+[(self.variations[name]["original"],self.variations[name]["modified"])]}
+	     replacedinputs=[(c if c not in repdict else repdict[c]) for c in originalinputs ]
              if x in self.obs:
                  selections=[]
                  for s in self.selections[x] :
@@ -478,9 +511,18 @@ int main(int argc, char** argv)
                         selections.append(s+"__syst__"+name)
                      else :
                         selections.append(s)
-                 self.Define(x_syst,ncode,requires=selections)
+		 if self.dupcode:
+	                 self.Define(x_syst,ncode,requires=selections)
+		 else :
+	                 self.Define(x_syst,ncode,requires=selections,original=x,inputs=replacedinputs)
+	
              if x in self.filters:
-                 self.Selection(x_syst,ncode)
+	         if self.dupcode :
+	                 self.Selection(x_syst,ncode)
+		 else:
+	                 self.Selection(x_syst,ncode,original=x,inputs=replacedinputs)
+		
+
 
 
 

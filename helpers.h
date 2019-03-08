@@ -3,7 +3,7 @@
 #include <ROOT/RVec.hxx>
 #include "Math/Vector4D.h"
 #include <ROOT/RDataFrame.hxx>
-
+#include <TH1F.h>
 template <typename type>
 auto Argmax(const type & v){
  return ROOT::VecOps::Reverse(ROOT::VecOps::Argsort(v))[0];
@@ -95,3 +95,8 @@ ROOT::VecOps::RVec<ROOT::VecOps::RVec<size_type>> Combinations(size_type size1, 
  }
 
 
+void loadHistograms(const ROOT::RDF::RNode &rdf, const std::string & name, std::vector<ROOT::RDF::RResultPtr<TH1D>>  & histos ){
+
+}
+
+#include "hmmtools/hmm_code.h"
