@@ -33,7 +33,8 @@ flow.Define("Muon_id","Muon_tightId*4+Muon_mediumId*2+Muon_softId")
 flow.Define("Muon_iso","Muon_pfRelIso04_all")
 flow.SubCollection("SelectedMuon","Muon",sel="Muon_iso < muIsoCut && Muon_id > muIdCut && Muon_pt > muPtCut && abs(Muon_dz) < dzCut && abs(Muon_dxy) < dxyCut") 
 flow.Define("SelectedMuon_p4","@p4v(SelectedMuon)")
-flow.Selection("twoMuons","nSelectedMuon>=2")
+flow.Selection("twoUnpreselMuons","nMuon>=2")
+flow.Selection("twoMuons","nSelectedMuon>=2") 
 flow.Distinct("MuMu","SelectedMuon")
 flow.Define("OppositeSignMuMu","Nonzero(MuMu0_charge != MuMu1_charge)",requires=["twoMuons"])
 flow.Selection("twoOppositeSignMuons","OppositeSignMuMu.size() > 0")
@@ -118,8 +119,10 @@ flow.Define("SelectedJet_btagWeight","vector_map(btagWeight,SelectedJet_btagCSVV
 flow.Define("btagEventWeight","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
 flow.CentralWeight("genWeight")
 flow.CentralWeight("btagEventWeight")
-flow.Define("muEffWeight","effMu2016(Mu0_pt,Mu0_eta)*effMu2016(Mu1_pt,Mu1_eta)")
-flow.CentralWeight("muEffWeight",["twoOppositeSignMuons"])
+flow.ObjectAt("LeadMuon","SelectedMuon","0")
+flow.ObjectAt("SubMuon","SelectedMuon","1")
+flow.Define("muEffWeight","effMu2016(LeadMuon_pt,LeadMuon_eta)*effMu2016(SubMuon_pt,SubMuon_eta)")
+flow.CentralWeight("muEffWeight",["twoMuons"])
 
 
 #Systematic weights

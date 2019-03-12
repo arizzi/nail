@@ -186,6 +186,10 @@ class SampleProcessing:
         self.variations[name]["modified"]=modified
 	self.variations[name]["exceptions"]=exceptions
 
+#    def addInput(self,node,inp):
+ #       if inp not in self.inputs[node]:
+#	    self.inputs[node]=sorted(list(set(self.inputs[node]+[inp])))
+
     def CentralWeight(self,name,selections=[""]):
 	for s in selections :
 	   missing=[x for x in self.selections[name] if x not in (self.selections[s]+[s] if s != "" else []) ]
@@ -196,6 +200,8 @@ class SampleProcessing:
 	   if s not in self.centralWeights:
 		self.centralWeights[s]=[]
 	   self.centralWeights[s].append(name)
+#	   if s!="": #FIXME: seems a bug to me
+#	       self.addInput(s,name)
 
     def VariationWeight(self,name,replacing="",filt=lambda hname,wname : "__syst__" not in hname):
         self.variationWeights[name]={}
@@ -212,7 +218,9 @@ class SampleProcessing:
 	self.histos["bin"]=binHint
 
     def recursiveGetWeights(self,sel):
-	res=set()
+#	if "__syst__" in sel :
+#	    return self.recursiveGetWeights(sel[:sel.find("__syst__")])
+	res=set(self.centralWeights[""])
 	if sel in self.centralWeights :
 	    res.update(self.centralWeights[sel])
 	for dep in self.selections[sel] :
@@ -288,6 +296,7 @@ class SampleProcessing:
     def printRDFCpp(self,to,debug=False,outname="out.C"):
 	sels={self.selSetName(self.selections[x]):self.sortedUniqueColumns(self.selections[x]) for x in to}
 	weights=self.defineWeights(sels)
+	print "Weights to print", weights
 	f=open(outname,"w")
 	ftxt=open(outname[:-2]+"-data.txt","w")
 	f.write('''
@@ -300,16 +309,21 @@ class SampleProcessing:
 #define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
 ''')
         toprint=set([x for t in to+weights for x in self.allNodesTo([t])])
+	print "toprint:",toprint
         cols=self.validCols # if not optimizeFilters else orderedColumns
         for c in cols :
            if c in toprint:
+	    print '.... doing..',c
             if c in self.obs or c in self.filters :
 	      if self.code[c] != "" :
 		inputs=""
 		for i in self.inputs[c]:
 		   if inputs!="":
 		       inputs+=", "
-		   inputs+="const %s & %s"%(self.dftypes[i],i)
+		   if i in self.dftypes :
+			   inputs+="const %s & %s"%(self.dftypes[i],i)
+		   else:
+			   inputs+="const %s & %s"%(self.dftypes[i[:i.rfind("__syst__")]],i)
 		#print "auto func__%s = [](%s) { return %s; };" %(c,inputs,self.code[c])
 		debugcode="\n"
 		if debug :
@@ -436,16 +450,23 @@ int main(int argc, char** argv)
     
     def allNodesTo(self,nodes) :   
 	  ret=set()
+	  print "Looking for nodes",nodes
 	  for x in nodes:
+	      print "x is ",x
+	      print "     inputs ", self.inputs[x]
+	      print "     selections ", self.selections[x]
+	      print "     weights ", (self.centralWeights[x] if x in self.centralWeights else [])
 	      if x in self.nodesto :
 		  toset=self.nodesto[x]
 	      else:
 #	          print >> sys.stderr, "Nodes to ",x
-                  toset=set([x])
-                  toset.update(self.allNodesTo(self.inputs[x]))
-                  toset.update(self.allNodesTo(self.selections[x]))
+                  self.nodesto[x]=set([x]) 
+                  self.nodesto[x].update(self.allNodesTo(self.inputs[x]))
+		  print x,self.selections[x]
+                  self.nodesto[x].update(self.allNodesTo(self.selections[x]))
+                  self.nodesto[x].update(self.allNodesTo((self.centralWeights[x] if x in self.centralWeights else [])))
 	          #this is cached because it cannot change
-	          self.nodesto[x]=toset;
+	          toset=self.nodesto[x]
               ret.update(toset)
           return ret
     def allNodesFromWithWhiteList(self,nodes,wl,cache={}) :
@@ -456,10 +477,10 @@ int main(int argc, char** argv)
                   childrenset=cache[x]
 #	          print >> sys.stderr, "Nodes from ",x
 	      else:
-                  children=set([n for n in self.inputs.keys() if ((x in self.inputs[n]+self.selections[n]) and (n in wl))])
-                  childrenset=set(children)
-                  childrenset.update(self.allNodesFromWithWhiteList(children,wl,cache))
-                  cache[x]=childrenset
+                  children=set([n for n in self.inputs.keys() if ((x in self.inputs[n]+self.selections[n]+(self.centralWeights[n] if n in self.centralWeights else [])) and (n in wl))])
+                  cache[x]=set(children)
+                  cache[x].update(self.allNodesFromWithWhiteList(children,wl,cache))
+                  childrenset=cache[x]
 	      ret.update(childrenset)
           return ret
 
@@ -472,7 +493,7 @@ int main(int argc, char** argv)
 	          childrenset=cache[x]
 	      else :
 #	          print >> sys.stderr, "Nodes from ",x
-                  children=set([n for n in self.inputs.keys() if x in self.inputs[n]+self.selections[n]])
+                  children=set([n for n in self.inputs.keys() if x in self.inputs[n]+self.selections[n]+(self.centralWeights[n] if n in self.centralWeights else [])])
 	          childrenset=set(children)
                   childrenset.update(self.allNodesFrom(children,cache))
 	          cache[x]=childrenset
@@ -492,7 +513,6 @@ int main(int argc, char** argv)
 	 affected.sort(key=lambda x: self.validCols.index(x)) #keep original sorting
          replacementTable=[(x,x+"__syst__"+name) for x in affected]
          for x,x_syst in replacementTable:
-
 	     ncode=""
 	     if self.dupcode :
                ncode=" "+self.code[x]+" "  #FIXME: we should avoid duplicating the code
@@ -519,10 +539,12 @@ int main(int argc, char** argv)
              if x in self.filters:
 	         if self.dupcode :
 	                 self.Selection(x_syst,ncode)
+			 #FIXME: weights
 		 else:
 	                 self.Selection(x_syst,ncode,original=x,inputs=replacedinputs)
-		
-
+			 if x in self.centralWeights :
+	 	     		 replacedweights=[(c if c not in repdict else repdict[c]) for c in self.centralWeights[x] ]
+        	         	 self.centralWeights[x_syst]=replacedweights
 
 
 
