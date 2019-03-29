@@ -1,5 +1,7 @@
 # Natual Analysis Implementation Language
 
+
+## Data model
 The event data used is of 4 different types
 - scalars (one number per event)
 - vectors (multiple entries per event, with variable number of entries)
@@ -13,6 +15,7 @@ I.e. the data of a single event can be seen as split on an fixed size horizontal
 
 A naming convention is assumed so that length of vectors and collections are named _nNameOfCollection_ and properties of an object or a collection are named *NameOfCollection_property*
 
+![datamodel](image.png)
 
 ## Actions
 
