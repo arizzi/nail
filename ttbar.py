@@ -163,28 +163,38 @@ flow.Selection("WControl","nTightLepton==1 && nLepton ==1 & nMediumBTagged==0")
 #define some event weights
 flow.Define("CleanJet_btagWeight","vector_map(btagWeight,CleanJet_btag,CleanJet_pt,CleanJet_eta)")
 flow.Define("btagEventWeight","std::accumulate(CleanJet_btagWeight.begin(),CleanJet_btagWeight.end(),1, std::multiplies<double>())")
-flow.AddDefaultWeight("genWeight")
-flow.AddDefaultWeight("btagEventWeight")
+flow.CentralWeight("genWeight")
+flow.CentralWeight("btagEventWeight")
 
 
 #Systematic weights
-flow.AddWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
+flow.VariationWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
+
+#flow.AddWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
 #this is not obvious as N replicas can change... think about it
-flow.AddWeightArray("LHEPdfWeight",100,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
+#flow.AddWeightArray("LHEPdfWeight",100,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
 
 
 #create btag systematics
 #this should be simplified
-flow.Define("CleanJet_btagWeight_up","vector_map(btagWeightUp,CleanJet_btag,CleanJet_pt,CleanJet_eta)")
-flow.Define("btagEventWeightUp","std::accumulate(CleanJet_btagWeight.begin(),CleanJet_btagWeight.end(),1, std::multiplies<double>())")
-flow.Systematic("BTagUp","CleanJet_btagWeight","CleanJet_btagWeight_up")
-flow.createVariationBranch("BTagUp",["defaultWeight"])
+flow.Define("SelectedJet_btagWeight_up","vector_map(btagWeightUp,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
+#flow.Define("btagEventWeightUp","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
+flow.Systematic("BTagUp","SelectedJet_btagWeight","SelectedJet_btagWeight_up")
+
+flow.createVariationBranch("BTagUp",["btagEventWeight"])
+flow.VariationWeight("btagEventWeight__syst__BTagUP","btagEventWeight")
+
+
+#flow.Define("CleanJet_btagWeight_up","vector_map(btagWeightUp,CleanJet_btag,CleanJet_pt,CleanJet_eta)")
+#flow.Define("btagEventWeightUp","std::accumulate(CleanJet_btagWeight.begin(),CleanJet_btagWeight.end(),1, std::multiplies<double>())")
+#flow.Systematic("BTagUp","CleanJet_btagWeight","CleanJet_btagWeight_up")
+#flow.createVariationBranch("BTagUp",["defaultWeight"])
 
 #takes all syst variations of defaultWeight
-for x in  flow.validCols :
-    if x[:len("defaultWeight")]=="defaultWeight" :
-	if x!="defaultWeight":
-		flow.AddWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
+#for x in  flow.validCols :
+#    if x[:len("defaultWeight")]=="defaultWeight" :
+#	if x!="defaultWeight":
+#		flow.AddWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
 
 #Define Systematic variations
 flow.Define("Muon_pt_scaleUp","Muon_pt*1.01") #this should be protected against systematic variations
@@ -221,24 +231,13 @@ for c in colsToPlot :
     colsToPlotWithSyst+=[x for x in flow.validCols if x[:len(c)]==c]
 
 
-print '''
-#include <Math/VectorUtil.h>
-#include <ROOT/RVec.hxx>
-#include "Math/Vector4D.h"
-#include <ROOT/RDataFrame.hxx>
-#include "helpers.h"
-#define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
-#define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
 
-''' 
-print >> sys.stderr, "Number of known columns", len(flow.validCols)
 #flow.printRDFCpp(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
 for x in colsToPlotWithSyst :
 	flow.Histo(x)
 
 
-
-flow.printRDFCpp(colsToPlotWithSyst+flow.weights.keys()+["Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"],debug=False)
+flow.printRDFCpp(colsToPlotWithSyst+["Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"],debug=False,selections=["hasOSSF"],outname=sys.argv[1])
 #["defaultWeight","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"]+flow.weights.keys(),debug=False)
 
 

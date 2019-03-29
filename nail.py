@@ -3,6 +3,49 @@ import clang.cindex
 import re
 import sys
 
+from clang.cindex import CursorKind
+from clang.cindex import Index
+from clang.cindex import TypeKind
+headerstring='''
+#include <Math/VectorUtil.h>
+#include <ROOT/RVec.hxx>
+#include "Math/Vector4D.h"
+#include <ROOT/RDataFrame.hxx>
+#include "helpers.h"
+#define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
+#define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>,ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>> 
+//ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
+'''
+
+
+ROOT.gInterpreter.Declare(headerstring)
+def returnType(code,function):
+   myFuncCode = code
+   ROOT.gInterpreter.Declare(myFuncCode)
+   getTypeNameF = "auto %s_typestring=ROOT::Internal::RDF::TypeID2TypeName(typeid(ROOT::TypeTraits::CallableTraits<decltype(%s)>::ret_type));"%(function,function)
+   ROOT.gInterpreter.ProcessLine(getTypeNameF)
+   return getattr(ROOT,"%s_typestring"%function)
+
+whatever='''  idx = clang.cindex.Index.create()
+  tu = idx.parse('tmp.cpp', args=['-std=c++14'], unsaved_files=[('tmp.cpp', headerstring+code)],  options=0)
+  for cursor in tu.cursor.get_children():
+    # Ignore AST elements not from the main source file (e.g.
+    # from included files).
+    if not cursor.location.file or cursor.location.file.name != 'tmp.cpp':
+        continue
+
+    # Ignore AST elements not a function declaration.
+    if cursor.kind != CursorKind.FUNCTION_DECL:
+        continue
+
+    # Obtain the return Type for this function.
+    result_type = cursor.type.get_result()
+    print "function", cursor.spelling,function
+    if cursor.spelling == function:
+	return result_type.kind.spelling
+  return "void"
+'''
+
 class AggregatedSample:
     def __init__(self,*args):
       self.samples=list(args)
@@ -38,8 +81,9 @@ class SampleProcessing:
 	self.conf={}
 	self.histos={}
 	self.variationWeights={} #variation weights
-	self.centralWeights={} #default weights for each selection
+	self.centralWeights={"":[]} #default weights for each selection
 	self.regexps=[]
+	self.originalCols=cols
 	self.validCols=[x[0] for x in cols]
 	self.inputTypes={x[0]:x[1] for x in cols}
 	self.dftypes=dftypes
@@ -53,9 +97,12 @@ class SampleProcessing:
 #	print 'TLorentzVector makeP4(float pt,float eta,float phi,float m) { TLorentzVector r; r.SetPtEtaPhiM(pt,eta,phi,m); return r;}'
 
 #	print "gSystem->Load(\"libGenVector.so\")"
-	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_\[\]]+)\]","ROOT::Math::PtEtaPhiMVector(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
-	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::PtEtaPhiMVector(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
-	self.AddCodeRegex(("@p4v\(([a-zA-Z0-9_]+)\)","vector_map_t<ROOT::Math::PtEtaPhiMVector>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
+	#self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_\[\]]+)\]","ROOT::Math::PtEtaPhiMVector(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
+	#self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::PtEtaPhiMVector(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
+	#self.AddCodeRegex(("@p4v\(([a-zA-Z0-9_]+)\)","vector_map_t<ROOT::Math::PtEtaPhiMVector>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
+	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_\[\]]+)\]","ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >>(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
+	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
+	self.AddCodeRegex(("@p4v\(([a-zA-Z0-9_]+)\)","vector_map_t<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >	>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
 	self.nodesto={}
 #	self.Define("defaultWeight","1.")
 
@@ -104,7 +151,7 @@ class SampleProcessing:
         additionalCols= [ (name+c[l:],c) for c in self.validCols  if c[0:l+1]==existing+"_" ]
         for (ac,oc) in additionalCols :
             self.Define(ac,"Take(%s,%s)"%(oc,name))
-        self.Define("n%s"%name,"%s.size()"%(name))
+        self.Define("n%s"%name,"int(%s.size())"%(name)) #FIXME: cast to unsigned due to ROOT problem with uint leaf
 
     def ObjectAt(self,name,existing,index="",requires=[]):
 	self.SubCollection(name,existing,index,requires,True)
@@ -117,7 +164,7 @@ class SampleProcessing:
 		print "Cannot find collection",collection
 		return
 	self.Define("%s_allpairs"%name,"Combinations(Nonzero(%s),Nonzero(%s))"%(collection,collection))
-	self.Define(name,"%s_allpairs[0] > %s_allpairs[1]"%(name,name))
+	self.Define(name,"%s_allpairs[0] < %s_allpairs[1]"%(name,name))
 	self.Define("%s0"%name,"%s_allpairs[0][%s]"%(name,name))
 	self.Define("%s1"%name,"%s_allpairs[1][%s]"%(name,name))
 	self.SubCollectionFromIndices("%s0"%name,collection)
@@ -218,6 +265,7 @@ class SampleProcessing:
 	self.histos["bin"]=binHint
 
     def recursiveGetWeights(self,sel):
+	print "Weights for",sel
 #	if "__syst__" in sel :
 #	    return self.recursiveGetWeights(sel[:sel.find("__syst__")])
 	res=set(self.centralWeights[""])
@@ -225,6 +273,7 @@ class SampleProcessing:
 	    res.update(self.centralWeights[sel])
 	for dep in self.selections[sel] :
 	    res.update(self.recursiveGetWeights(dep))
+	print res
 	return res
 
     def sortedUniqueColumns(self,cols):
@@ -251,8 +300,9 @@ class SampleProcessing:
 	res=[]
 	for name,selections in selectionsSets.iteritems():
 #    name=selSetName(selections)	   
+	    print "define weight",name
 	    weights=set()
-	    if name=="":
+	    if name=="" and "" in self.centralWeights:
 	        weights.update(self.centralWeights[""])
 	    for s in selections:
 	        weights.update(self.recursiveGetWeights(s))
@@ -265,6 +315,7 @@ class SampleProcessing:
 		else:	
 	                self.Define("%sWeight__%s"%(name,variation),"*".join(replacedWeights))
 		res.append("%sWeight__%s"%(name,variation))
+		print "%sWeight__%s"%(name,variation)
 	return res
    
 
@@ -293,27 +344,23 @@ class SampleProcessing:
 	    code=re.sub(s,r,code)
 	return code
 
-    def printRDFCpp(self,to,debug=False,outname="out.C"):
+    def printRDFCpp(self,to,debug=False,outname="out.C",selections=[],snap=[],snapsel=""):
 	sels={self.selSetName(self.selections[x]):self.sortedUniqueColumns(self.selections[x]) for x in to}
+	print "Update with",{x:self.sortedUniqueColumns(self.selections[x]+[x]) for x in selections}
+	sels.update({x:self.sortedUniqueColumns(self.selections[x]+[x]) for x in selections})
+	selections.append("")
+	print "Sels are",sels
 	weights=self.defineWeights(sels)
 	print "Weights to print", weights
 	f=open(outname,"w")
 	ftxt=open(outname[:-2]+"-data.txt","w")
-	f.write('''
-#include <Math/VectorUtil.h>
-#include <ROOT/RVec.hxx>
-#include "Math/Vector4D.h"
-#include <ROOT/RDataFrame.hxx>
-#include "helpers.h"
-#define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
-#define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
-''')
+	f.write(headerstring)
         toprint=set([x for t in to+weights for x in self.allNodesTo([t])])
-	print "toprint:",toprint
+#	print "toprint:",toprint
         cols=self.validCols # if not optimizeFilters else orderedColumns
         for c in cols :
            if c in toprint:
-	    print '.... doing..',c
+#	    print '.... doing..',c
             if c in self.obs or c in self.filters :
 	      if self.code[c] != "" :
 		inputs=""
@@ -325,12 +372,14 @@ class SampleProcessing:
 		   else:
 			   inputs+="const %s & %s"%(self.dftypes[i[:i.rfind("__syst__")]],i)
 		#print "auto func__%s = [](%s) { return %s; };" %(c,inputs,self.code[c])
-		debugcode="\n"
+		debugcode=""
 		if debug :
 			debugcode='std::cout << "%s" << std::endl;\n'%c
-		f.write("auto func__%s(%s) { %s return %s; }\n" %(c,inputs,debugcode,self.code[c]))
-		f.write("using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;\n"%(c,c))
-		self.dftypes[c]="type__%s"%(c)
+		cppcode="auto func__%s(%s) { %s return %s; }\n" %(c,inputs,debugcode,self.code[c])
+		f.write(cppcode)
+		self.dftypes[c]=returnType(cppcode,"func__%s"%c) #"type__%s"%(c)
+		#f.write("using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;\n"%(c,c))
+		#self.dftypes[c]="type__%s"%(c)
 
 	f.write('''
 int main(int argc, char** argv)
@@ -359,51 +408,81 @@ int main(int argc, char** argv)
            if c in toprint:
             if c in self.obs or c in self.filters :
 		if self.code[c] != "" :
-	               f.write('%s.Define("%s",func__%s,{%s});\n'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]])))
+	               f.write('%s.Define("%s",func__%s,{%s})\n'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]])))
 		else:
-	               f.write('%s.Define("%s",func__%s,{%s});\n'%(rdf,c,self.originals[c],",".join([ '"%s"'%x for x in self.inputs[c]])))
+	               f.write('%s.Define("%s",func__%s,{%s})\n'%(rdf,c,self.originals[c],",".join([ '"%s"'%x for x in self.inputs[c]])))
 		rdf="rdf%s"%i
 		i+=1
 		if debug :
 		   f.write('std::cout << "%s" << std::endl;\n'%rdf);
-		f.write("auto rdf%s ="%i)
-           #     rdf=""
+#		f.write("auto rdf%s ="%i)
+                rdf=""
         f.write(rdf+";\n")
+        rdf="rdf0"
  	f.write("auto toplevel=%s;\n"%rdf)
 	f.write("std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;\n")
-	rdflast=rdf
+	#rdflast=rdf
+	rdflast="rdf0"
 	selsprinted=[]
 	selname=""
+	f.write("{")
         for t in to :
 	    if t in self.histos:
-                if len(self.selections[t]) > 0 :
+	      for s in selections:
+	          if s=="":
+		    if len(self.selections[t]) > 0 :
+		      selname=self.selSetName(self.selections[t])
+		      sellist=self.selections[t]
+		    else :
+		      selname=""  
+		  else:
+           	      missing=[x for x in self.selections[t] if x not in self.selections[s]+[s]  ]
+		      if missing :
+			 print "Cannot make ",t," in ",s," because the following selections are needed",missing
+		 	 continue
+		      selname=s
+		      sellist=self.selections[s]+[s]
+		      print "making ",t, "in",selname
+ 
+                  if selname!="" :
 #                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.selections[t]))
-		    selname=self.selSetName(self.selections[t])
 		    if selname not in selsprinted :
- 		        f.write('auto selection_%s=%s.Filter("%s","%s")'%(selname,rdflast,self.selections[t][0],self.selections[t][0]))
- 	 	        for s in self.selections[t][1:]:
+			print "Printing",selname
+			f.write("}")
+ 		        f.write('auto selection_%s=%s.Filter("%s","%s")'%(selname,rdflast,sellist[0],sellist[0]))
+ 	 	        for s in sellist[1:]:
                             f.write('.Filter("%s","%s")'%(s,s))
 		        f.write(";\n")
 			selsprinted.append(selname)
-			#f.write('loadHistograms(%s,"%s",histos);\n'%("selection_%s"%selname,"selection_%s"%selname))
+			f.write("{")
+			f.write('loadHistograms(%s,"%s",histos);\n'%("selection_%s"%selname,"selection_%s"%selname))
 		    rdf="selection_%s"%selname
-                else:
+                  else:
 		    rdf=rdflast
-		ftxt.write('%s,%s,%s,1000,0,100,%s,%sWeight__Central\n'%(rdf,t,t,t,selname))
-                f.write('histos.emplace_back(%s.Histo1D({"%s", "%s", 1000, 0, 100},"%s","%sWeight__Central"));\n'%(rdf,t,t,t,selname))
-		for w in self.variationWeights :
+
+
+		  ftxt.write('%s,%s,%s,2000,0,2000,%s,%sWeight__Central\n'%(rdf,t,t,t,selname))
+                  #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
+                  #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
+		  for w in self.variationWeights :
 		    if self.variationWeights[w]["filter"](t,w):
 			    ww="%sWeight__%s"%(selname,w)
 	                    ftxt.write('%s,%s__weight__%s,%s,1000,0,100,%s,%s\n'%(rdf,t,w,t,t,ww))
-	                    f.write('histos.emplace_back(%s.Histo1D({"%s__weight__%s", "%s", 1000, 0, 100},"%s","%s"));\n'%(rdf,t,w,t,t,ww))
+	                    #f.write('histos.emplace_back(%s.Histo1D({"%s%s__weight__%s", "%s {%s}", 1000, 0, 100},"%s","%s"));\n'%(rdf,t,s,w,t,s,t,ww))
+
+	
+	if snapsel=="":
+		rdf=rdflast
+	else :
+		rdf="selection_%s"%snapsel
+
+	f.write("}")
+	f.write('auto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;'%(rdf,",".join(['"%s"'%x for x in snap])))
 
 	f.write('''
 
-
-
-
-   auto tr=selection_twoMuons_twoOppositeSignMuons_twoJets.Snapshot("ot", (out+"Snap.root").c_str(), {"nJet","SBClassifier","NSoft2","event","VBFRegion","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx"});
-   selection_twoMuons_twoOppositeSignMuons_twoJets.Report()->Print();
+//   auto tr=selection_twoMuons_twoOppositeSignMuons_twoJets.Snapshot("ot", (out+"Snap.root").c_str(), {"nJet","SBClassifier","NSoft2","event","VBFRegion","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx"});
+//   selection_twoMuons_twoOppositeSignMuons_twoJets.Report()->Print();
 
 
 
@@ -450,19 +529,19 @@ int main(int argc, char** argv)
     
     def allNodesTo(self,nodes) :   
 	  ret=set()
-	  print "Looking for nodes",nodes
+#	  print "Looking for nodes",nodes
 	  for x in nodes:
-	      print "x is ",x
-	      print "     inputs ", self.inputs[x]
-	      print "     selections ", self.selections[x]
-	      print "     weights ", (self.centralWeights[x] if x in self.centralWeights else [])
+#	      print "x is ",x
+#	      print "     inputs ", self.inputs[x]
+#	      print "     selections ", self.selections[x]
+#	      print "     weights ", (self.centralWeights[x] if x in self.centralWeights else [])
 	      if x in self.nodesto :
 		  toset=self.nodesto[x]
 	      else:
 #	          print >> sys.stderr, "Nodes to ",x
                   self.nodesto[x]=set([x]) 
                   self.nodesto[x].update(self.allNodesTo(self.inputs[x]))
-		  print x,self.selections[x]
+#		  print x,self.selections[x]
                   self.nodesto[x].update(self.allNodesTo(self.selections[x]))
                   self.nodesto[x].update(self.allNodesTo((self.centralWeights[x] if x in self.centralWeights else [])))
 	          #this is cached because it cannot change
@@ -501,7 +580,7 @@ int main(int argc, char** argv)
           return ret
 
     def findAffectedNodesForVariationOnTargets(self,name,targets):
-	 nodesTo=set()
+	 nodesTo=set(targets)
  	 nodesTo.update([x for x in self.allNodesTo(targets) if x not in self.variations[name]["exceptions"] ])
 #         print  >> sys.stderr, "VarNodesTo:",nodesTo
 	 return [x for x in self.allNodesFromWithWhiteList([self.variations[name]["original"]],nodesTo) if x in nodesTo]
@@ -511,6 +590,7 @@ int main(int argc, char** argv)
          affected=(self.findAffectedNodesForVariationOnTargets(name,target))
 #	 print >> sys.stderr, "Found affected\n", affected
 	 affected.sort(key=lambda x: self.validCols.index(x)) #keep original sorting
+	 res=[y+"__syst__"+name for y in affected if y in target]
          replacementTable=[(x,x+"__syst__"+name) for x in affected]
          for x,x_syst in replacementTable:
 	     ncode=""
@@ -546,8 +626,8 @@ int main(int argc, char** argv)
 	 	     		 replacedweights=[(c if c not in repdict else repdict[c]) for c in self.centralWeights[x] ]
         	         	 self.centralWeights[x_syst]=replacedweights
 
-
-
+	 print "Recomputing for",res
+         return res
     
 
 
