@@ -4,11 +4,13 @@
 #include "Math/Vector4D.h"
 #include <ROOT/RDataFrame.hxx>
 #include <TH1F.h>
+// In VecOps: https://root.cern.ch/doc/master/namespaceROOT_1_1VecOps.html#afbb36f30def53183079a0b7c1e6fb2d1
 template <typename type>
 auto Argmax(const type & v){
  return ROOT::VecOps::Reverse(ROOT::VecOps::Argsort(v))[0];
 }
 
+// In VecOps: https://root.cern.ch/doc/master/namespaceROOT_1_1VecOps.html#a014f2c5ed975748eef051cf7df955ba5
 template <typename type>
 auto Max(const type & v){
  return v[ROOT::VecOps::Reverse(ROOT::VecOps::Argsort(v))[0]];
