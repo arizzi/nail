@@ -2,7 +2,7 @@ import ROOT
 import clang.cindex
 import re
 import sys
-
+import copy
 from clang.cindex import CursorKind
 from clang.cindex import Index
 from clang.cindex import TypeKind
@@ -112,13 +112,13 @@ class SampleProcessing:
 
     def Inputs(self,colName):
 	if colName not in self.inputs:
-	    print "parse! ", colName
-            self.inputs[colName]=sorted(list(set(self.findCols(self.code[colName])+self.explicitInputs[colName])))
+#	    print "parse! ", colName
+            self.inputs[colName]=sorted(set(self.findCols(self.code[colName])+self.explicitInputs[colName]))
         return self.inputs[colName]
 
     def Requirements(self,colName):
 	if colName not in self.requirements:
-            self.requirements[colName]=list(set(self.explicitRequirements[colName]+[y for x in self.Inputs(colName) for y in self.Requirements(x)]))
+            self.requirements[colName]=self.sortedUniqueColumns(self.explicitRequirements[colName]+[y for x in self.Inputs(colName) for y in self.Requirements(x)])
         return self.requirements[colName]
 
 	
@@ -198,7 +198,7 @@ class SampleProcessing:
 #	pass
 
     def Define(self,name,code,inputs=[],requires=[],original=""):
-	print >> sys.stderr, name
+#	print >> sys.stderr, name
 	if name not in self.validCols :
 #	if name not in self.validCols or name[:len(defaultWeight)]=="defaultWeight":
 #	    if name[:len(defaultWeight)] == "defaultWeight" and name in self.validCols:
@@ -282,12 +282,12 @@ class SampleProcessing:
 #	   if s!="": #FIXME: seems a bug to me
 #	       self.addInput(s,name)
 
-    def VariationWeight(self,name,replacing="",filt=lambda hname,wname : "__syst__" not in hname):
+    def VariationWeight(self,name,replacing="",filt=lambda sname,hname,wname : "__syst__" not in hname and "__syst__" not in sname):
         self.variationWeights[name]={}
         self.variationWeights[name]["replacing"]=replacing
         self.variationWeights[name]["filter"]=filt
 	     
-    def VariationWeightArray(self,name,nentries=1,replacing="",filt=lambda hname,wname : "__syst__" not in hname):
+    def VariationWeightArray(self,name,nentries=1,replacing="",filt=lambda sname,hname,wname : "__syst__" not in hname and "__syst__" not in sname):
         for i in range(nentries):
 		self.Define("%s%s"%(name,i),"%s[%s]"%(name,i))
                 self.VariationWeight("%s%s"%(name,i),replacing,filt)
@@ -297,7 +297,7 @@ class SampleProcessing:
 	self.histos["bin"]=binHint
 
     def recursiveGetWeights(self,sel):
-	print "Weights for",sel
+#	print "Weights for",sel
 #	if "__syst__" in sel :
 #	    return self.recursiveGetWeights(sel[:sel.find("__syst__")])
 	res=set(self.centralWeights[""])
@@ -305,7 +305,7 @@ class SampleProcessing:
 	    res.update(self.centralWeights[sel])
 	for dep in self.Requirements(sel) :
 	    res.update(self.recursiveGetWeights(dep))
-	print res
+#	print res
 	return res
 
     def sortedUniqueColumns(self,cols):
@@ -315,13 +315,13 @@ class SampleProcessing:
 	sels=self.sortedUniqueColumns(sels)
 	return "_".join(sels)
 
-    def replaceWeightWithVariation(self,variation,weights,hist="" ):
+    def replaceWeightWithVariation(self,selname,variation,weights,hist="" ):
 	v=self.variationWeights[variation]
-	if v["replacing"] == "" and v["filter"](variation,hist) :
+	if v["replacing"] == "" and v["filter"](selname,variation,hist) :
 	   return list(weights)+[variation]
 	res=[]
 	for w in weights:
-	   if w==v["replacing"] and v["filter"](variation,hist) :
+	   if w==v["replacing"] and v["filter"](selname,variation,hist) :
 		res.append(variation)
 	   else :
 		res.append(w)
@@ -340,14 +340,17 @@ class SampleProcessing:
 	        weights.update(self.recursiveGetWeights(s))
 	    for variation in ["Central"]+self.variationWeights.keys():
 	        replacedWeights=weights
+		same=False
 		if variation != "Central":
-		    replacedWeights=self.replaceWeightWithVariation(variation,weights)
-		if not replacedWeights:
+		    replacedWeights=self.replaceWeightWithVariation(name,variation,weights)
+		  #  same=(set(replacedWeights)==weights)
+	        if variation == "Central" or "__syst__" not in name :	
+ 		  if not replacedWeights:
 	                self.Define("%sWeight__%s"%(name,variation),"1.")
-		else:	
+		  else:	
 	                self.Define("%sWeight__%s"%(name,variation),"*".join(replacedWeights))
-		res.append("%sWeight__%s"%(name,variation))
-		print "%sWeight__%s"%(name,variation)
+		  res.append("%sWeight__%s"%(name,variation))
+#		print "%sWeight__%s"%(name,variation)
 	return res
    
 
@@ -376,18 +379,22 @@ class SampleProcessing:
 	    code=re.sub(s,r,code)
 	return code
 
-    def printRDFCpp(self,to,debug=False,outname="out.C",selections=[],snap=[],snapsel=""):
+    def printRDFCpp(self,to,debug=False,outname="out.C",selections={},snap=[],snapsel=""):
+	histos=[x for y in selections for x in selections[y]]
+	to=list(set(to+histos+selections.keys()))
 	sels={self.selSetName(self.Requirements(x)):self.sortedUniqueColumns(self.Requirements(x)) for x in to}
-	print "Update with",{x:self.sortedUniqueColumns(self.Requirements(x)+[x]) for x in selections}
+#	print "Update with",{x:self.sortedUniqueColumns(self.Requirements(x)+[x]) for x in selections}
 	sels.update({x:self.sortedUniqueColumns(self.Requirements(x)+[x]) for x in selections})
-	selections.append("")
-	print "Sels are",sels
+
+##AR###	selections.append("")
+
+#	print "Sels are",sels
 	weights=self.defineWeights(sels)
-	print "Weights to print", weights
+#	print "Weights to print", weights
 	f=open(outname,"w")
 	ftxt=open(outname[:-2]+"-data.txt","w")
 	f.write(headerstring)
-        toprint=set(selections+[x for t in to+weights for x in self.allNodesTo([t])])
+        toprint=set(selections.keys()+[x for t in to+weights for x in self.allNodesTo([t])])
 #	print "toprint:",toprint
         cols=self.validCols # if not optimizeFilters else orderedColumns
         for c in cols :
@@ -458,9 +465,11 @@ int main(int argc, char** argv)
 	selsprinted=[]
 	selname=""
 	f.write("{")
-        for t in to :
-	    if t in self.histos:
-	      for s in selections:
+	for s in selections.keys() :
+	    for t in selections[s] :
+#        for t in to :
+#	    if t in self.histos:
+#	      for s in selections.keys():
 	          if s=="":
 		    if len(self.Requirements(t)) > 0 :
 		      selname=self.selSetName(self.Requirements(t))
@@ -474,16 +483,16 @@ int main(int argc, char** argv)
 		 	 continue
 		      selname=s
 		      sellist=self.Requirements(s)+[s]
-		      print "making ",t, "in",selname
+#		      print "making ",t, "in",selname
  
                   if selname!="" :
 #                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.requirements[t]))
 		    if selname not in selsprinted :
-			print "Printing",selname
+#			print "Printing",selname
 			f.write("}")
  		        f.write('auto selection_%s=%s.Filter("%s","%s")'%(selname,rdflast,sellist[0],sellist[0]))
- 	 	        for s in sellist[1:]:
-                            f.write('.Filter("%s","%s")'%(s,s))
+ 	 	        for ss in sellist[1:]:
+                            f.write('.Filter("%s","%s")'%(ss,ss))
 		        f.write(";\n")
 			selsprinted.append(selname)
 			f.write("{")
@@ -494,13 +503,13 @@ int main(int argc, char** argv)
 
 
 		  ftxt.write('%s,%s,%s,2000,0,2000,%s,%sWeight__Central\n'%(rdf,t,t,t,selname))
-                  f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
+                  f.write('histos.emplace_back(%s.Histo1D({"%s--%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                   #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
 		  for w in self.variationWeights :
-		    if self.variationWeights[w]["filter"](t,w):
+		    if self.variationWeights[w]["filter"](selname,t,w):
 			    ww="%sWeight__%s"%(selname,w)
 	                    ftxt.write('%s,%s__weight__%s,%s,1000,0,100,%s,%s\n'%(rdf,t,w,t,t,ww))
-	                    #f.write('histos.emplace_back(%s.Histo1D({"%s%s__weight__%s", "%s {%s}", 1000, 0, 100},"%s","%s"));\n'%(rdf,t,s,w,t,s,t,ww))
+	                    f.write('histos.emplace_back(%s.Histo1D({"%s%s__weight__%s", "%s {%s}", 1000, 0, 100},"%s","%s"));\n'%(rdf,t,s,w,t,s,t,ww))
 
 	
 	if snapsel=="":
@@ -580,7 +589,9 @@ int main(int argc, char** argv)
 	          toset=self.nodesto[x]
               ret.update(toset)
           return ret
-    def allNodesFromWithWhiteList(self,nodes,wl,cache={}) :
+    def allNodesFromWithWhiteList(self,nodes,wl,cache=None) :
+	  if cache is None:
+		cache={}
           #cache is local because it changes with more defines
 	  ret=set()
 	  for x in nodes :
@@ -588,8 +599,9 @@ int main(int argc, char** argv)
                   childrenset=cache[x]
 #	          print >> sys.stderr, "Nodes from ",x
 	      else:
-                  #children=set([n for n in self.validCols if ((x in self.Inputs(n)+self.Requirements(n)+(self.centralWeights[n] if n in self.centralWeights else [])) and (n in wl))])
+#                 children=set([n for n in self.validCols if ((x in self.Inputs(n)+self.Requirements(n)+(self.centralWeights[n] if n in self.centralWeights else [])) and (n in wl))])
                   children=set([n for n in wl if ((x in self.Inputs(n)+self.Requirements(n)+(self.centralWeights[n] if n in self.centralWeights else [])) )])
+#		  print "children of ",x,children
                   cache[x]=set(children)
                   cache[x].update(self.allNodesFromWithWhiteList(children,wl,cache))
                   childrenset=cache[x]
@@ -597,7 +609,9 @@ int main(int argc, char** argv)
           return ret
 
 
-    def allNodesFrom(self,nodes,cache={}) :   
+    def allNodesFrom(self,nodes,cache=None) :   
+	  if cache is None:
+		cache={}
 	  #cache is local because it changes with more defines
 	  ret=set()
 	  for x in nodes :
@@ -615,15 +629,16 @@ int main(int argc, char** argv)
     def findAffectedNodesForVariationOnTargets(self,name,targets):
 	 nodesTo=set(targets)
  	 nodesTo.update([x for x in self.allNodesTo(targets) if x not in self.variations[name]["exceptions"] ])
-#         print  >> sys.stderr, "VarNodesTo:",nodesTo
+         #print  >> sys.stderr, "VarNodesTo:",nodesTo
 	 return [x for x in self.allNodesFromWithWhiteList([self.variations[name]["original"]],nodesTo) if x in nodesTo]
+
    
     def createVariationBranch(self,name,target):
 #	 print >> sys.stderr, "Find affected"
          affected=(self.findAffectedNodesForVariationOnTargets(name,target))
 #	 print >> sys.stderr, "Found affected\n", affected
 	 affected.sort(key=lambda x: self.validCols.index(x)) #keep original sorting
-	 res=[y+"__syst__"+name for y in affected if y in target]
+	 res=[y+"__syst__"+name for y in affected if y in target] 
          replacementTable=[(x,x+"__syst__"+name) for x in affected]
          for x,x_syst in replacementTable:
 	     ncode=""
@@ -644,23 +659,41 @@ int main(int argc, char** argv)
                         selections.append(s+"__syst__"+name)
                      else :
                         selections.append(s)
-		 if self.dupcode:
+
+ 		 if x+"__syst__"+name not in self.validCols:
+ 		   if self.dupcode:
 	                 self.Define(x_syst,ncode,requires=selections)
-		 else :
+		   else :
 	                 self.Define(x_syst,ncode,requires=selections,original=x,inputs=replacedinputs)
 	
              if x in self.selections:
-	         if self.dupcode :
+ 		 if x+"__syst__"+name not in self.validCols:
+	             if self.dupcode :
 	                 self.Selection(x_syst,ncode)
 			 #FIXME: weights
-		 else:
+		     else:
 	                 self.Selection(x_syst,ncode,original=x,inputs=replacedinputs)
 			 if x in self.centralWeights :
 	 	     		 replacedweights=[(c if c not in repdict else repdict[c]) for c in self.centralWeights[x] ]
         	         	 self.centralWeights[x_syst]=replacedweights
 
-	 print "Recomputing for",res
+#	 print "Recomputing for",res
          return res
+
+    def createSystematicBranches(self,systematics,selWithHistos):
+	res=copy.deepcopy(selWithHistos)
+	for syst in systematics :
+	    print "creating systematic",syst
+ 	    for sel in selWithHistos :
+		selWsyst=self.createVariationBranch(syst,[sel])
+	   	histos=self.createVariationBranch(syst,selWithHistos[sel])
+		selKey=sel
+		if selWsyst:
+		   selKey = selWsyst[0]
+		if selKey not in res:
+		    res[selKey]=[x for x in selWithHistos[sel] if x+"__syst__"+syst not in histos] #copy.deepcopy(res[sel])
+		res[selKey]+=histos
+        return res
     
 
 

@@ -106,7 +106,7 @@ flow.DefaultConfig(higgsMassWindowWidth=15,mQQcut=400,nominalHMass=125.03)
 flow.Selection("MassWindow","abs(Higgs.M()-nominalHMass)<higgsMassWindowWidth")
 flow.Selection("SideBand","! MassWindow")
 flow.Selection("VBFRegion","Mqq > mQQcut && QJet0_pt > 35")
-flow.Selection("SignalRegion","VBFRegion && MassWindow")
+flow.Selection("SignalRegion","VBFRegion && MassWindow", requires=["VBFRegion","MassWindow"])
 flow.Selection("TwoJetsTwoMu","twoJets && twoMuons", requires=["twoJets","twoMuons"])
 
 #flow.Trainable("SBClassifier","evalMVA",["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"],splitMode="TripleMVA",requires="VBFRegion") 
@@ -127,7 +127,7 @@ flow.CentralWeight("muEffWeight",["twoMuons"])
 
 
 #Systematic weights
-flow.VariationWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
+flow.VariationWeightArray("LHEScaleWeight",9,filt=lambda sname,hname,wname : "__syst__" not in hname and "__syst__" not in sname ) #systematic variations are 1D, let's avoid systematics of systematic
 #this is not obvious as N replicas can change... think about it
 #flow.AddVariationWeightArray("LHEPdfWeight",30,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
 
@@ -156,21 +156,38 @@ for i in range(5):
   flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100.f"%i)
   flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
-for i in range(5):
-   print >> sys.stderr, "JEC",i
-   flow.createVariationBranch("JEC%s"%i,["SBClassifier"])
-  
-flow.createVariationBranch("MuScaleUp",["SBClassifier"])
-flow.createVariationBranch("MuScaleDown",["SBClassifier"])
+
+#define hist mapping
+genericHistos=["LeadMuon_pt","LeadMuon_eta","SubMuon_pt","SubMuon_eta","QJet0_pt","QJet1_pt","QJet0_eta","QJet1_eta"]
+signalHistos=["Higgs_m","SBClassifier"]
+histosPerSelection={
+"VBFRegion" : genericHistos+["Mqq"],
+"SignalRegion": genericHistos+signalHistos,
+"SideBand" : genericHistos+signalHistos,
+"TwoJetsTwoMu" : genericHistos
+}
+
+systematics=["JEC%s"%x for x in range(5)] + ["MuScaleDown","MuScaleUp"]
+histosWithSystematics=flow.createSystematicBranches(systematics,histosPerSelection)
+
+for sel in  histosWithSystematics:
+	print sel,":",histosWithSystematics[sel]
+
+
+#for i in range(5):
+#   print >> sys.stderr, "JEC",i
+#   flow.createVariationBranch("JEC%s"%i,["SBClassifier"])
+#flow.createVariationBranch("MuScaleUp",["SBClassifier"])
+#flow.createVariationBranch("MuScaleDown",["SBClassifier"])
 
 print >> sys.stderr, "Number of known columns", len(flow.validCols)
 #flow.printRDFCpp(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
-for x in ["QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"] :
-	flow.Histo(x)
+#for x in ["QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"] :
+#	flow.Histo(x)
 
 
 snap=["SideBand","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx","VBFRegion","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]
-flow.printRDFCpp(snap+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"],debug=False,outname=sys.argv[1],selections=["VBFRegion","SideBand","TwoJetsTwoMu"],snap=snap,snapsel="TwoJetsTwoMu")
+flow.printRDFCpp(snap,debug=False,outname=sys.argv[1],selections=histosWithSystematics,snap=snap,snapsel="TwoJetsTwoMu")
 
 
 #flow.printRDF(list(flow.allNodesTo("SBClassifier")))
