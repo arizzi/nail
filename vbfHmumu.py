@@ -57,7 +57,7 @@ flow.MergeCollections("Lepton",["LooseMuon","LooseEle"])
 
 #Match jets to selected loose Leptons
 flow.Define("Jet_p4","@p4v(Jet)")
-flow.MatchDeltaR("Jet","Lepton")
+flow.Match("Jet","Lepton")
 
 #VBF Jets kinematics
 flow.DefaultConfig(jetPtCut=25)
@@ -73,8 +73,8 @@ flow.TakePair("QJet","SelectedJet","JetPair","Argmax(MemberMap((JetPair0_p4+JetP
 #compute number of softjets removing signal footprint
 flow.Define("SoftActivityJet_mass","SoftActivityJet_pt*0")
 flow.Define("SoftActivityJet_p4","@p4v(SoftActivityJet)")
-flow.MatchDeltaR("SelectedJet","SoftActivityJet") #associate signal jets
-flow.MatchDeltaR("SelectedMuon","SoftActivityJet") #associate signal muons
+flow.Match("SelectedJet","SoftActivityJet") #associate signal jets
+flow.Match("SelectedMuon","SoftActivityJet") #associate signal muons
 flow.Define("NSoft2",'''SoftActivityJetNjets2-Sum( 
 (	   (SoftActivityJet_SelectedJetDr<0.2 && ( SoftActivityJet_SelectedJetIdx == QJet0 ||  SoftActivityJet_SelectedJetIdx == QJet1)) ||
 	   (SoftActivityJet_SelectedMuonDr<0.2 && ( SoftActivityJet_SelectedJetIdx == Mu0 || SoftActivityJet_SelectedJetIdx == Mu1) ) || 
@@ -107,6 +107,7 @@ flow.Selection("MassWindow","abs(Higgs.M()-nominalHMass)<higgsMassWindowWidth")
 flow.Selection("SideBand","! MassWindow")
 flow.Selection("VBFRegion","Mqq > mQQcut && QJet0_pt > 35")
 flow.Selection("SignalRegion","VBFRegion && MassWindow")
+flow.Selection("TwoJetsTwoMu","twoJets && twoMuons", requires=["twoJets","twoMuons"])
 
 #flow.Trainable("SBClassifier","evalMVA",["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"],splitMode="TripleMVA",requires="VBFRegion") 
 flow.Define("Higgs_pt","Higgs.Pt()")
@@ -168,10 +169,10 @@ for x in ["QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1
 	flow.Histo(x)
 
 
-
-flow.printRDFCpp(["SideBand","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx","VBFRegion","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"],debug=False,outname=sys.argv[1],selections=["VBFRegion","SideBand"])
+snap=["SideBand","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx","VBFRegion","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]
+flow.printRDFCpp(snap+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"],debug=False,outname=sys.argv[1],selections=["VBFRegion","SideBand","TwoJetsTwoMu"],snap=snap,snapsel="TwoJetsTwoMu")
 
 
 #flow.printRDF(list(flow.allNodesTo("SBClassifier")))
-
+print "definedCols",len(flow.validCols)
 

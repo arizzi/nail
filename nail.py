@@ -71,12 +71,16 @@ class SampleProcessing:
 	self.dupcode=False
     def init(self,name,cols,dftypes):
 	self.name=name
+        self.lazyParse=True
+	self.cols={}
         self.obs={} 
-        self.filters={} 
+        self.selections={} 
         self.code={} 
         self.inputs={} 
+        self.explicitInputs={} 
         self.originals={} 
-        self.selections={} 
+        self.requirements={} 
+        self.explicitRequirements={} 
 	self.variations={}
 	self.conf={}
 	self.histos={}
@@ -91,7 +95,7 @@ class SampleProcessing:
 #	print self.inputTypes
 	for c,t in cols:
 	    self.inputs[c]=[]
-	    self.selections[c]=[]
+	    self.requirements[c]=[]
 #	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_]+)\]","makeP4(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
 #	self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","makeP4(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
 #	print 'TLorentzVector makeP4(float pt,float eta,float phi,float m) { TLorentzVector r; r.SetPtEtaPhiM(pt,eta,phi,m); return r;}'
@@ -106,6 +110,18 @@ class SampleProcessing:
 	self.nodesto={}
 #	self.Define("defaultWeight","1.")
 
+    def Inputs(self,colName):
+	if colName not in self.inputs:
+	    print "parse! ", colName
+            self.inputs[colName]=sorted(list(set(self.findCols(self.code[colName])+self.explicitInputs[colName])))
+        return self.inputs[colName]
+
+    def Requirements(self,colName):
+	if colName not in self.requirements:
+            self.requirements[colName]=list(set(self.explicitRequirements[colName]+[y for x in self.Inputs(colName) for y in self.Requirements(x)]))
+        return self.requirements[colName]
+
+	
     def AddCodeRegex(self,regexp):
 	self.regexps.append(regexp)
 
@@ -192,23 +208,39 @@ class SampleProcessing:
             self.obs[name]={}
             self.originals[name]=original
             self.code[name]=pcode
-            self.inputs[name]=sorted(list(set(self.findCols(pcode)+inputs)))
-            self.selections[name]=list(set(requires+[y for x in self.inputs[name] if x in self.selections for y in self.selections[x]]))
+	    self.explicitInputs[name]=inputs
+	    self.explicitRequirements[name]=requires
+	    if not self.lazyParse:
+                self.inputs[name]=sorted(list(set(self.findCols(pcode)+inputs)))
+                self.requirements[name]=list(set(requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
+
 	else :
 	    print "Attempt to redefine column", name," => noop"
 
-    def Selection(self,name,code,inputs=[],original="") :
+    def Selection(self,name,code,inputs=[],requires=[],original="") :
         if name not in self.validCols :
             self.validCols.append(name)
 	    pcode=self.preprocess(code)
-	    self.filters[name]={}
+	    self.selections[name]={}
             self.originals[name]=original
             self.code[name]=pcode
-            self.inputs[name]=sorted(list(set(self.findCols(pcode)+inputs)))
-            self.selections[name]=list(set([y for x in self.inputs[name] if x in self.selections for y in self.selections[x]]))
+            self.explicitInputs[name]=inputs
+            self.explicitRequirements[name]=requires
+            if not self.lazyParse:
+                self.inputs[name]=sorted(list(set(self.findCols(pcode)+inputs)))
+                self.requirements[name]=list(set(requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
 
 	else :
 	    print "Attempt to redefine column", name," => noop"
+
+    def Match(self,name1,name2,metric="P4DELTAR",metricName="Dr",embed=([],[]),defIdx=-1,defVal=-99):
+        name=name1+name2+"Pair"
+        self.Define(name,"Combinations(n%s,n%s)"%(name1,name2))
+        self.Define("%s_%s"%(name,metricName),"vector_map(%s,Take(%s_p4,%s[0]),Take(%s_p4,%s[1]))"%(metric,name1,name,name2,name))
+        self.Define("%s_%s%s"%(name1,name2,metricName),"matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_%s)"%(name1,name2,defVal,name,metricName))
+        self.Define("%s_%s%s"%(name2,name1,metricName),"matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_%s)"%(name1,name2,defVal,name,metricName))
+        self.Define("%s_%sIdx"%(name1,name2),"matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):%s;},%s_%s)"%(name1,name2,defIdx,name,metricName))
+        self.Define("%s_%sIdx"%(name2,name1),"matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):%s;},%s_%s)"%(name1,name2,defIdx,name,metricName))
 
     def MatchDeltaR(self,name1,name2,embed=([],[]),defIdx=-1,defVal=-99):
         name=name1+name2+"Pair"
@@ -239,7 +271,7 @@ class SampleProcessing:
 
     def CentralWeight(self,name,selections=[""]):
 	for s in selections :
-	   missing=[x for x in self.selections[name] if x not in (self.selections[s]+[s] if s != "" else []) ]
+	   missing=[x for x in self.Requirements(name) if x not in (self.Requirements(s)+[s] if s != "" else []) ]
 	   if len(missing) > 0 :
 		print "Cannot add weight",name,"on selection",s,"because",name,"requires the following additional selections"
 		print missing
@@ -271,7 +303,7 @@ class SampleProcessing:
 	res=set(self.centralWeights[""])
 	if sel in self.centralWeights :
 	    res.update(self.centralWeights[sel])
-	for dep in self.selections[sel] :
+	for dep in self.Requirements(sel) :
 	    res.update(self.recursiveGetWeights(dep))
 	print res
 	return res
@@ -345,9 +377,9 @@ class SampleProcessing:
 	return code
 
     def printRDFCpp(self,to,debug=False,outname="out.C",selections=[],snap=[],snapsel=""):
-	sels={self.selSetName(self.selections[x]):self.sortedUniqueColumns(self.selections[x]) for x in to}
-	print "Update with",{x:self.sortedUniqueColumns(self.selections[x]+[x]) for x in selections}
-	sels.update({x:self.sortedUniqueColumns(self.selections[x]+[x]) for x in selections})
+	sels={self.selSetName(self.Requirements(x)):self.sortedUniqueColumns(self.Requirements(x)) for x in to}
+	print "Update with",{x:self.sortedUniqueColumns(self.Requirements(x)+[x]) for x in selections}
+	sels.update({x:self.sortedUniqueColumns(self.Requirements(x)+[x]) for x in selections})
 	selections.append("")
 	print "Sels are",sels
 	weights=self.defineWeights(sels)
@@ -355,16 +387,16 @@ class SampleProcessing:
 	f=open(outname,"w")
 	ftxt=open(outname[:-2]+"-data.txt","w")
 	f.write(headerstring)
-        toprint=set([x for t in to+weights for x in self.allNodesTo([t])])
+        toprint=set(selections+[x for t in to+weights for x in self.allNodesTo([t])])
 #	print "toprint:",toprint
         cols=self.validCols # if not optimizeFilters else orderedColumns
         for c in cols :
            if c in toprint:
 #	    print '.... doing..',c
-            if c in self.obs or c in self.filters :
+            if c in self.obs or c in self.selections :
 	      if self.code[c] != "" :
 		inputs=""
-		for i in self.inputs[c]:
+		for i in self.Inputs(c):
 		   if inputs!="":
 		       inputs+=", "
 		   if i in self.dftypes :
@@ -406,11 +438,11 @@ int main(int argc, char** argv)
         f.write("auto rdf0 =")
         for c in cols :
            if c in toprint:
-            if c in self.obs or c in self.filters :
+            if c in self.obs or c in self.selections :
 		if self.code[c] != "" :
-	               f.write('%s.Define("%s",func__%s,{%s})\n'%(rdf,c,c,",".join([ '"%s"'%x for x in self.inputs[c]])))
+	               f.write('%s.Define("%s",func__%s,{%s})\n'%(rdf,c,c,",".join([ '"%s"'%x for x in self.Inputs(c)])))
 		else:
-	               f.write('%s.Define("%s",func__%s,{%s})\n'%(rdf,c,self.originals[c],",".join([ '"%s"'%x for x in self.inputs[c]])))
+	               f.write('%s.Define("%s",func__%s,{%s})\n'%(rdf,c,self.originals[c],",".join([ '"%s"'%x for x in self.Inputs(c)])))
 		rdf="rdf%s"%i
 		i+=1
 		if debug :
@@ -430,22 +462,22 @@ int main(int argc, char** argv)
 	    if t in self.histos:
 	      for s in selections:
 	          if s=="":
-		    if len(self.selections[t]) > 0 :
-		      selname=self.selSetName(self.selections[t])
-		      sellist=self.selections[t]
+		    if len(self.Requirements(t)) > 0 :
+		      selname=self.selSetName(self.Requirements(t))
+		      sellist=self.Requirements(t)
 		    else :
 		      selname=""  
 		  else:
-           	      missing=[x for x in self.selections[t] if x not in self.selections[s]+[s]  ]
+           	      missing=[x for x in self.Requirements(t) if x not in self.Requirements(s)+[s]  ]
 		      if missing :
 			 print "Cannot make ",t," in ",s," because the following selections are needed",missing
 		 	 continue
 		      selname=s
-		      sellist=self.selections[s]+[s]
+		      sellist=self.Requirements(s)+[s]
 		      print "making ",t, "in",selname
  
                   if selname!="" :
-#                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.selections[t]))
+#                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.requirements[t]))
 		    if selname not in selsprinted :
 			print "Printing",selname
 			f.write("}")
@@ -462,7 +494,7 @@ int main(int argc, char** argv)
 
 
 		  ftxt.write('%s,%s,%s,2000,0,2000,%s,%sWeight__Central\n'%(rdf,t,t,t,selname))
-                  #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
+                  f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                   #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
 		  for w in self.variationWeights :
 		    if self.variationWeights[w]["filter"](t,w):
@@ -519,11 +551,11 @@ int main(int argc, char** argv)
 
 
     def baseInputs(self,x) :
-        if len(self.inputs[x]) == 0 :
+        if len(self.Inputs(x)) == 0 :
           return [x]
         else :
           ret=[]
-          for i in self.inputs[x] :
+          for i in self.Inputs(x) :
              ret.extend(self.baseInputs(i))
           return ret
     
@@ -533,16 +565,16 @@ int main(int argc, char** argv)
 	  for x in nodes:
 #	      print "x is ",x
 #	      print "     inputs ", self.inputs[x]
-#	      print "     selections ", self.selections[x]
+#	      print "     selections ", self.requirements[x]
 #	      print "     weights ", (self.centralWeights[x] if x in self.centralWeights else [])
 	      if x in self.nodesto :
 		  toset=self.nodesto[x]
 	      else:
 #	          print >> sys.stderr, "Nodes to ",x
                   self.nodesto[x]=set([x]) 
-                  self.nodesto[x].update(self.allNodesTo(self.inputs[x]))
-#		  print x,self.selections[x]
-                  self.nodesto[x].update(self.allNodesTo(self.selections[x]))
+                  self.nodesto[x].update(self.allNodesTo(self.Inputs(x)))
+#		  print x,self.requirements[x]
+                  self.nodesto[x].update(self.allNodesTo(self.Requirements(x)))
                   self.nodesto[x].update(self.allNodesTo((self.centralWeights[x] if x in self.centralWeights else [])))
 	          #this is cached because it cannot change
 	          toset=self.nodesto[x]
@@ -556,7 +588,8 @@ int main(int argc, char** argv)
                   childrenset=cache[x]
 #	          print >> sys.stderr, "Nodes from ",x
 	      else:
-                  children=set([n for n in self.inputs.keys() if ((x in self.inputs[n]+self.selections[n]+(self.centralWeights[n] if n in self.centralWeights else [])) and (n in wl))])
+                  #children=set([n for n in self.validCols if ((x in self.Inputs(n)+self.Requirements(n)+(self.centralWeights[n] if n in self.centralWeights else [])) and (n in wl))])
+                  children=set([n for n in wl if ((x in self.Inputs(n)+self.Requirements(n)+(self.centralWeights[n] if n in self.centralWeights else [])) )])
                   cache[x]=set(children)
                   cache[x].update(self.allNodesFromWithWhiteList(children,wl,cache))
                   childrenset=cache[x]
@@ -572,7 +605,7 @@ int main(int argc, char** argv)
 	          childrenset=cache[x]
 	      else :
 #	          print >> sys.stderr, "Nodes from ",x
-                  children=set([n for n in self.inputs.keys() if x in self.inputs[n]+self.selections[n]+(self.centralWeights[n] if n in self.centralWeights else [])])
+                  children=set([n for n in self.validCols if x in self.Inputs(n)+self.Requirements(n)+(self.centralWeights[n] if n in self.centralWeights else [])])
 	          childrenset=set(children)
                   childrenset.update(self.allNodesFrom(children,cache))
 	          cache[x]=childrenset
@@ -601,12 +634,12 @@ int main(int argc, char** argv)
                  reg=regBound+y+regBound
                  ncode=re.sub(reg,"\\1"+y_syst+"\\2",ncode)
 	     	
-	     originalinputs=self.inputs[x]
+	     originalinputs=self.Inputs(x)
 	     repdict={c[0]:c[1] for c in replacementTable+[(self.variations[name]["original"],self.variations[name]["modified"])]}
 	     replacedinputs=[(c if c not in repdict else repdict[c]) for c in originalinputs ]
              if x in self.obs:
                  selections=[]
-                 for s in self.selections[x] :
+                 for s in self.Requirements(x) :
                      if s in affected :
                         selections.append(s+"__syst__"+name)
                      else :
@@ -616,7 +649,7 @@ int main(int argc, char** argv)
 		 else :
 	                 self.Define(x_syst,ncode,requires=selections,original=x,inputs=replacedinputs)
 	
-             if x in self.filters:
+             if x in self.selections:
 	         if self.dupcode :
 	                 self.Selection(x_syst,ncode)
 			 #FIXME: weights
