@@ -52,3 +52,7 @@ Add a systematic/variation weight. Those weights are applied in addition to cent
 
 ##### VariationWeightArray
 Same as VariationWeight but taking an array of weights in input and creating a different weight for each element. The number of elements to consider must be specified
+
+## Yield
+The output of the processing consists of histograms and ntuples. Histograms can be specified as a dictionary where for each selection a list of histograms is given. Ntuples are specified with a selection and a list of columns to store.
+
