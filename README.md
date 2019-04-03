@@ -44,5 +44,11 @@ Merge two collections having all properties shared by the two input collections.
 ##### Match
 Matches two collections via DeltaR or a user specified metric in a non-unique way. For each element of collection A the closest element of collection B is computed and viceversa. Delta R and index of the matched object are defined. 
 
+##### CentralWeight
+Add a weight that has to be used when making nominal distribution (central value). CentralWeight can be called several times, the product of the weights will be the resulting nominal weight. The weight can be applied only to some phase space regions by specifying the list of selections the weight belong to (a selection inherit the product of the weight from selections that are listed as requirements)
 
+##### VariationWeight
+Add a systematic/variation weight. Those weights are applied in addition to central weight to evaluate systematic shifts. By default distribution made with those weight are not computed for distribution obtained with systematic variation of some input (i.e. we do not evaluate the effect of applying multiple systematics in one go)
 
+##### VariationWeightArray
+Same as VariationWeight but taking an array of weights in input and creating a different weight for each element. The number of elements to consider must be specified
