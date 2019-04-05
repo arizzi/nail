@@ -53,11 +53,11 @@ Add a systematic/variation weight. Those weights are applied in addition to cent
 ##### VariationWeightArray
 Same as VariationWeight but taking an array of weights in input and creating a different weight for each element. The number of elements to consider must be specified
 
-##### inner looping operations and special keywords
+### Inner looping operations and special keywords
 Several operations can be defined to (inner) loop on an collection (e.g. the Muons).
 In addition some special operations starting with "@" are implemented to simplify common operations
 
-###### @p4, @p4v
+###### Special keywords: @p4, @p4v
 @p4 and @p4v expand a collection name to get its pt,eta,phi,mass property and build a 4 vector. E.g. one can do
 Define("Muon_p4","@p4v(Muon)") or Define("Muon0_p4","@p4(Muon[0])") or Define("Higgs_p4","@p4(Higgs)")
 
@@ -65,10 +65,9 @@ Define("Muon_p4","@p4v(Muon)") or Define("Muon0_p4","@p4(Muon[0])") or Define("H
 calls *function* on each element of the collection passing the listed properties as argument.
 A variant vector_map_t<Type> exists to call a constructor of Type for each entry in the collection instead of calling the *function*.
 
-##### MemberMap (preprocessor macro)
+###### MemberMap (preprocessor macro)
 *MemberMap* allows to easily call a member of class A for each entry in a vector<A>
   
-##### P4DELTAR 
 
 ###### operations defined in ROOT::VecOps
 other operations are listed here https://root.cern.ch/doc/master/namespaceROOT_1_1VecOps.html 
@@ -81,4 +80,7 @@ For example Max,Min,Argmax,Argmin, DeltaPhi, DeltaR, InvariantMass,
 
 ## Yield
 The output of the processing consists of histograms and ntuples. Histograms can be specified as a dictionary where for each selection a list of histograms is given. Ntuples are specified with a selection and a list of columns to store.
+
+## Histogram binning
+Rules should be specified for binning and range using regexps
 
