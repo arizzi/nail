@@ -56,6 +56,11 @@ Same as VariationWeight but taking an array of weights in input and creating a d
 ### Inner looping operations and special keywords
 Several operations can be defined to (inner) loop on an collection (e.g. the Muons).
 In addition some special operations starting with "@" are implemented to simplify common operations
+Currently *nail* uses ROOT RDataFrame as a backend hence some of the syntax is taken directly from it.
+For example logical operations can be defined across columns and result in a vector of 1 and 0, e.g.
+"Muon_pt > 20 && abs(Muon_eta) < 2" is a vector of 1 and 0 corresponding to muons passing/failing such selection.
+A selection like that can be directly used as Muon_phi[Muon_pt > 20 && abs(Muon_eta) < 2] returning a vector with only the phi of the muons passing the selection.
+it should be noted that as of today Muon_phi[2] also works and return phi of the 3rd muon, while in order to obtain the muons and indices {1,3,5} the special function "Take" should be used instead of operator[] (feature request to ROOT was made to improve this https://sft.its.cern.ch/jira/browse/ROOT-10071)
 
 ###### Special keywords: @p4, @p4v
 @p4 and @p4v expand a collection name to get its pt,eta,phi,mass property and build a 4 vector. E.g. one can do
@@ -72,7 +77,7 @@ A variant vector_map_t<Type> exists to call a constructor of Type for each entry
 ###### operations defined in ROOT::VecOps
 other operations are listed here https://root.cern.ch/doc/master/namespaceROOT_1_1VecOps.html 
 and can be applied to inner vectors.
-For example Max,Min,Argmax,Argmin, DeltaPhi, DeltaR, InvariantMass, 
+For example Argsort,Max,Min,Argmax,Argmin, DeltaPhi, DeltaR, InvariantMass ...
 
 
 
