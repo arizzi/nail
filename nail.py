@@ -113,7 +113,7 @@ class SampleProcessing:
     def Inputs(self,colName):
 	if colName not in self.inputs:
 #	    print "parse! ", colName
-            self.inputs[colName]=sorted(set(self.findCols(self.code[colName])+self.explicitInputs[colName]))
+            self.inputs[colName]=sorted(set(self.findCols(self.code[colName],colName)+self.explicitInputs[colName]))
         return self.inputs[colName]
 
     def Requirements(self,colName):
@@ -158,7 +158,7 @@ class SampleProcessing:
 	if not singleton:
 		self.Define("n%s"%name,"Sum(%s)"%(name),requires=requires)
 
-    def SubCollectionFromIndices(self,name,existing,sel=""):
+    def SubCollectionFromIndices(self,name,existing,sel="",requires=[]):
         if sel!="":
                 self.Define(name,sel)
         else :
@@ -166,25 +166,25 @@ class SampleProcessing:
         l=len(existing)
         additionalCols= [ (name+c[l:],c) for c in self.validCols  if c[0:l+1]==existing+"_" ]
         for (ac,oc) in additionalCols :
-            self.Define(ac,"Take(%s,%s)"%(oc,name))
-        self.Define("n%s"%name,"int(%s.size())"%(name)) #FIXME: cast to unsigned due to ROOT problem with uint leaf
+            self.Define(ac,"Take(%s,%s)"%(oc,name),requires=requires)
+        self.Define("n%s"%name,"int(%s.size())"%(name),requires=requires) #FIXME: cast to unsigned due to ROOT problem with uint leaf
 
     def ObjectAt(self,name,existing,index="",requires=[]):
 	self.SubCollection(name,existing,index,requires,True)
 
-    def Distinct(self,name,collection,selection="") :
+    def Distinct(self,name,collection,selection="",requires=[]) :
 	if collection not in self.validCols :
 	   if "n%s"%collection in self.validCols:
-		self.Define(collection,"ROOT::VecOps::RVec<unsigned int>(n%s,true)"%collection)
+		self.Define(collection,"ROOT::VecOps::RVec<unsigned int>(n%s,true)"%collection,requires=requires)
 	   else :
 		print "Cannot find collection",collection
 		return
-	self.Define("%s_allpairs"%name,"Combinations(Nonzero(%s),Nonzero(%s))"%(collection,collection))
-	self.Define(name,"%s_allpairs[0] < %s_allpairs[1]"%(name,name))
-	self.Define("%s0"%name,"%s_allpairs[0][%s]"%(name,name))
-	self.Define("%s1"%name,"%s_allpairs[1][%s]"%(name,name))
-	self.SubCollectionFromIndices("%s0"%name,collection)
-	self.SubCollectionFromIndices("%s1"%name,collection)
+	self.Define("%s_allpairs"%name,"Combinations(Nonzero(%s),Nonzero(%s))"%(collection,collection),requires=requires)
+	self.Define(name,"%s_allpairs[0] < %s_allpairs[1]"%(name,name),requires=requires)
+	self.Define("%s0"%name,"%s_allpairs[0][%s]"%(name,name),requires=requires)
+	self.Define("%s1"%name,"%s_allpairs[1][%s]"%(name,name),requires=requires)
+	self.SubCollectionFromIndices("%s0"%name,collection,requires=requires)
+	self.SubCollectionFromIndices("%s1"%name,collection,requires=requires)
 
     def TakePair(self,name,existing,pairs,index,requires=[]):
 	self.Define("%s_indices"%(name),index,requires=requires)
@@ -211,7 +211,7 @@ class SampleProcessing:
 	    self.explicitInputs[name]=inputs
 	    self.explicitRequirements[name]=requires
 	    if not self.lazyParse:
-                self.inputs[name]=sorted(list(set(self.findCols(pcode)+inputs)))
+                self.inputs[name]=sorted(list(set(self.findCols(pcode,name)+inputs)))
                 self.requirements[name]=list(set(requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
 
 	else :
@@ -227,7 +227,7 @@ class SampleProcessing:
             self.explicitInputs[name]=inputs
             self.explicitRequirements[name]=requires
             if not self.lazyParse:
-                self.inputs[name]=sorted(list(set(self.findCols(pcode)+inputs)))
+                self.inputs[name]=sorted(list(set(self.findCols(pcode,name)+inputs)))
                 self.requirements[name]=list(set(requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
 
 	else :
@@ -355,13 +355,14 @@ class SampleProcessing:
    
 
 
-    def findCols(self,code) :
+    def findCols(self,code,colname) :
 	idx = clang.cindex.Index.create()
 	tu = idx.parse('tmp.cpp', args=['-std=c++11'], unsaved_files=[('tmp.cpp', code)],  options=0)
 	identifiers=set()
+        boundary=self.validCols.index(colname) if colname in self.validCols else -1
 	for t in tu.get_tokens(extent=tu.cursor.extent):
 	   if t.kind==clang.cindex.TokenKind.IDENTIFIER :
-	     if t.spelling in self.validCols:
+	     if t.spelling in self.validCols[:boundary]:
 	            identifiers.add(t.spelling)
 	     
 	ret=[]
@@ -409,6 +410,7 @@ class SampleProcessing:
 		   if i in self.dftypes :
 			   inputs+="const %s & %s"%(self.dftypes[i],i)
 		   else:
+			   print i, self.dftypes, c
 			   inputs+="const %s & %s"%(self.dftypes[i[:i.rfind("__syst__")]],i)
 		#print "auto func__%s = [](%s) { return %s; };" %(c,inputs,self.code[c])
 		debugcode=""
@@ -452,8 +454,8 @@ int main(int argc, char** argv)
 	               f.write('%s.Define("%s",func__%s,{%s})\n'%(rdf,c,self.originals[c],",".join([ '"%s"'%x for x in self.Inputs(c)])))
 		rdf="rdf%s"%i
 		i+=1
-		if debug :
-		   f.write('std::cout << "%s" << std::endl;\n'%rdf);
+#		if debug :
+#		   f.write('std::cout << "%s" << std::endl;\n'%rdf);
 #		f.write("auto rdf%s ="%i)
                 rdf=""
         f.write(rdf+";\n")
