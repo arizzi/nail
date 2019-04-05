@@ -71,7 +71,11 @@ Define("Muon_p4","@p4v(Muon)") or Define("Muon0_p4","@p4(Muon[0])") or Define("H
 
 ###### vector_map(function, collection_properties...) 
 calls *function* on each element of the collection passing the listed properties as argument.
+ This is now available in the new Map function of VecOps
+
+
 A variant vector_map_t<Type> exists to call a constructor of Type for each entry in the collection instead of calling the *function*.
+  
 
 ###### MemberMap (preprocessor macro)
 *MemberMap* allows to easily call a member of class A for each entry in a vector<A>
