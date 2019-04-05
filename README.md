@@ -19,6 +19,9 @@ A naming convention is assumed so that length of vectors and collections are nam
 
 ## Actions
 
+##### DefaultConfig
+DefaultConfig command allows to specify in one line multiple fixed values columns such as cut values that can be later variated in systematic shifts or optimization studies.
+
 ##### Define
 Define a variable of any type given some code snippet to compute it. It can reference any know variable (either a defined one or one known to be available in the input)
 Requirements can be specified, a _requirement_ is a selection that must be fullfilled in order for the code to make sense (e.g. Muon_pt[1] make sense only if there are at least 2 muons)
