@@ -669,12 +669,20 @@ int main(int argc, char** argv)
 	                 self.Define(x_syst,ncode,requires=selections,original=x,inputs=replacedinputs)
 	
              if x in self.selections:
+                 selections=[]
+                 for s in self.Requirements(x) :
+                     if s in affected :
+                        selections.append(s+"__syst__"+name)
+                     else :
+                        selections.append(s)
+
+
  		 if x+"__syst__"+name not in self.validCols:
 	             if self.dupcode :
-	                 self.Selection(x_syst,ncode)
+	                 self.Selection(x_syst,ncode,requires=selections)
 			 #FIXME: weights
 		     else:
-	                 self.Selection(x_syst,ncode,original=x,inputs=replacedinputs)
+	                 self.Selection(x_syst,ncode,original=x,inputs=replacedinputs,requires=selections)
 			 if x in self.centralWeights :
 	 	     		 replacedweights=[(c if c not in repdict else repdict[c]) for c in self.centralWeights[x] ]
         	         	 self.centralWeights[x_syst]=replacedweights
