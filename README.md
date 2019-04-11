@@ -1,10 +1,19 @@
 # Natual Analysis Implementation Language
 
-NAIL is a analysis language that should allow to define in an abstract way a data analsysis of a typical HEP experiment such as CMS or ATLAS.
+NAIL is an analysis language that should allow to define in an abstract way a data analsysis of a typical HEP experiment such as CMS or ATLAS.
+NAIL assumes an input data model for the event to process (see below) and allow to specify the event by event processing actions in a declarative form.
+Analysis variations for optimizations and systematics do not need to be explicitelly coded but are automatically derived from the event processing computational graph.
+Currently ROOT's RDataFrame is used as backend for a concrete implementation of the event processing as it allows parallelization and lazy evaluation.
+
+The final goal is to be able to query for a result and be able to automatically trigger the needed calculation with any optimization happening automatically.
+
+The idea is that the user can employ NAIL not only to describe the analysis at a given step but to develop the analysis, querying for intermediate results, updating the event processing strategy, adding systematics or exploring optimizations, all the way to finally statistically interepted data.
+
+## Current status
+A prototype for the Event processing exists. As it is the more delicate part it was developed first. We anticipate that the implementation of datasets handling, stat interpretation etc.. is a simpler problem that needs less R&D
 
 
-
-## Data model
+## Input Data model
 The event data used is of 4 different types
 - scalars (one number per event)
 - vectors (multiple entries per event, with variable number of entries)
@@ -22,7 +31,7 @@ The NANOAOD naming convention is assumed so that length of vectors and collectio
 
 
 
-##Event processing Actions
+## Event processing actions
 
 ##### DefaultConfig
 DefaultConfig command allows to specify in one line multiple fixed values columns such as cut values that can be later variated in systematic shifts or optimization studies.
@@ -95,7 +104,7 @@ For example Argsort,Max,Min,Argmax,Argmin, DeltaPhi, DeltaR, InvariantMass ...
 
 
 
-## Yield
+## Yield and Queries
 The output of the processing consists of histograms and ntuples. Histograms can be specified as a dictionary where for each selection a list of histograms is given. Ntuples are specified with a selection and a list of columns to store.
 
 ## Histogram binning
