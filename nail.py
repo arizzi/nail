@@ -118,7 +118,8 @@ class SampleProcessing:
 
     def Requirements(self,colName):
 	if colName not in self.requirements:
-            self.requirements[colName]=self.sortedUniqueColumns(self.explicitRequirements[colName]+[y for x in self.Inputs(colName)+self.explicitRequirements[colName] for y in self.Requirements(x)])
+	    self.requirements[colName]=self.sortedUniqueColumns(self.explicitRequirements[colName]+[y for x in self.Inputs(colName)+self.explicitRequirements[colName] for y in self.Requirements(x)])
+
         return self.requirements[colName]
 
 	
@@ -152,9 +153,9 @@ class SampleProcessing:
 	additionalCols= [ (name+c[l:],c) for c in self.validCols  if c[0:l+1]==existing+"_" ]
 	for (ac,oc) in additionalCols :	
 	   if oc in self.inputTypes and self.inputTypes[oc] =='Bool_t' :
-	       self.Define(ac,"(1*%s)[%s]"%(oc,name),requires=requires) #FIX RDF BUG
+	       self.Define(ac,"At((1*%s),%s)"%(oc,name),requires=requires) #FIX RDF BUG
 	   else:
-	       self.Define(ac,"%s[%s]"%(oc,name),requires=requires)
+	       self.Define(ac,"At(%s,%s)"%(oc,name),requires=requires)
 	if not singleton:
 		self.Define("n%s"%name,"Sum(%s)"%(name),requires=requires)
 
@@ -180,16 +181,16 @@ class SampleProcessing:
 		print "Cannot find collection",collection
 		return
 	self.Define("%s_allpairs"%name,"Combinations(Nonzero(%s),Nonzero(%s))"%(collection,collection),requires=requires)
-	self.Define(name,"%s_allpairs[0] < %s_allpairs[1]"%(name,name),requires=requires)
-	self.Define("%s0"%name,"%s_allpairs[0][%s]"%(name,name),requires=requires)
-	self.Define("%s1"%name,"%s_allpairs[1][%s]"%(name,name),requires=requires)
+	self.Define(name,"At(%s_allpairs,0) < At(%s_allpairs,1)"%(name,name),requires=requires)
+	self.Define("%s0"%name,"At(At(%s_allpairs,0),%s)"%(name,name),requires=requires)
+	self.Define("%s1"%name,"At(At(%s_allpairs,1),%s)"%(name,name),requires=requires)
 	self.SubCollectionFromIndices("%s0"%name,collection,requires=requires)
 	self.SubCollectionFromIndices("%s1"%name,collection,requires=requires)
 
     def TakePair(self,name,existing,pairs,index,requires=[]):
 	self.Define("%s_indices"%(name),index,requires=requires)
 	for i in [0,1]:
-	    self.ObjectAt("%s%s"%(name,i), existing,"int(%s%s[%s_indices])"%(pairs,i,name),requires=requires)
+	    self.ObjectAt("%s%s"%(name,i), existing,"int(At(%s%s,%s_indices))"%(pairs,i,name),requires=requires)
 
 #    def DefineWithWildCards(self,name,function,inputs,requires=[])
 	# need for example for HLT bits
@@ -198,7 +199,7 @@ class SampleProcessing:
 #	pass
 
     def Define(self,name,code,inputs=[],requires=[],original=""):
-#	print >> sys.stderr, name
+	print >> sys.stderr, name
 	if name not in self.validCols :
 #	if name not in self.validCols or name[:len(defaultWeight)]=="defaultWeight":
 #	    if name[:len(defaultWeight)] == "defaultWeight" and name in self.validCols:
@@ -236,7 +237,7 @@ class SampleProcessing:
     def Match(self,name1,name2,metric="P4DELTAR",metricName="Dr",embed=([],[]),defIdx=-1,defVal=-99):
         name=name1+name2+"Pair"
         self.Define(name,"Combinations(n%s,n%s)"%(name1,name2))
-        self.Define("%s_%s"%(name,metricName),"vector_map(%s,Take(%s_p4,%s[0]),Take(%s_p4,%s[1]))"%(metric,name1,name,name2,name))
+        self.Define("%s_%s"%(name,metricName),"vector_map(%s,Take(%s_p4,At(%s,0)),Take(%s_p4,At(%s,1)))"%(metric,name1,name,name2,name)) #FIXME : make no sense with p4 as arguments, need to be generic
         self.Define("%s_%s%s"%(name1,name2,metricName),"matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_%s)"%(name1,name2,defVal,name,metricName))
         self.Define("%s_%s%s"%(name2,name1,metricName),"matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_%s)"%(name1,name2,defVal,name,metricName))
         self.Define("%s_%sIdx"%(name1,name2),"matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):%s;},%s_%s)"%(name1,name2,defIdx,name,metricName))
@@ -245,7 +246,8 @@ class SampleProcessing:
     def MatchDeltaR(self,name1,name2,embed=([],[]),defIdx=-1,defVal=-99):
         name=name1+name2+"Pair"
         self.Define(name,"Combinations(n%s,n%s)"%(name1,name2))
-        self.Define("%s_dr"%name,"vector_map(P4DELTAR,Take(%s_p4,%s[0]),Take(%s_p4,%s[1]))"%(name1,name,name2,name))
+        #self.Define("%s_dr"%name,"vector_map(P4DELTAR,Take(%s_p4,At(%s,0)),Take(%s_p4,At(%s,1)))"%(name1,name,name2,name))
+        self.Define("%s_dr"%name,"DeltaR(Take(%s_eta,At(%s,0)),Take(%s_eta,At(%s,1)),Take(%s_phi,At(%s,0)),Take(%s_phi,At(%s,1))  )"%(name1,name,name2,name,name1,name,name2,name))
         self.Define("%s_%sDr"%(name1,name2),"matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_dr)"%(name1,name2,defVal,name))
         self.Define("%s_%sDr"%(name2,name1),"matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_dr)"%(name1,name2,defVal,name))
         self.Define("%s_%sIdx"%(name1,name2),"matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):%s;},%s_dr)"%(name1,name2,defIdx,name))
@@ -289,7 +291,7 @@ class SampleProcessing:
 	     
     def VariationWeightArray(self,name,nentries=1,replacing="",filt=lambda sname,hname,wname : "__syst__" not in hname and "__syst__" not in sname):
         for i in range(nentries):
-		self.Define("%s%s"%(name,i),"%s[%s]"%(name,i))
+		self.Define("%s%s"%(name,i),"At(%s,%s)"%(name,i))
                 self.VariationWeight("%s%s"%(name,i),replacing,filt)
 
     def Histo(self,name,binHint=None):
@@ -410,7 +412,7 @@ class SampleProcessing:
 		   if i in self.dftypes :
 			   inputs+="const %s & %s"%(self.dftypes[i],i)
 		   else:
-			   print i, self.dftypes, c
+			   #print i, self.dftypes, c
 			   inputs+="const %s & %s"%(self.dftypes[i[:i.rfind("__syst__")]],i)
 		#print "auto func__%s = [](%s) { return %s; };" %(c,inputs,self.code[c])
 		debugcode=""
@@ -505,7 +507,7 @@ int main(int argc, char** argv)
 
 
 		  ftxt.write('%s,%s,%s,2000,0,2000,%s,%sWeight__Central\n'%(rdf,t,t,t,selname))
-                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
+                  f.write('histos.emplace_back(%s.Histo1D({"%s--%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                   #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
 		  for w in self.variationWeights :
 		    if self.variationWeights[w]["filter"](selname,t,w):
@@ -519,8 +521,21 @@ int main(int argc, char** argv)
 	else :
 		rdf="selection_%s"%snapsel
 
-	f.write("}")
-	f.write('auto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;'%(rdf,",".join(['"%s"'%x for x in snap])))
+	f.write("}\n")
+        s=snapsel
+	snapGood=[]
+#        f.write("auto snaprdf=%s\n"%rdf)
+	for t in snap :
+             missing=[x for x in self.Requirements(t) if x not in self.Requirements(s)+[s]  ]
+             if missing :
+                 print "Removing ",t," in ",s," because the following selections are needed",missing
+#		 f.write(".Define(\"%s__safe\",\"("%t+("&&".join(missing))+")?%s:%s()\")\n"%(t,self.dftypes[c]))
+#		snapProt.append(t+"__safe")	 
+	     else :
+		snapGood.append(t)	 
+	
+	f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;'%(rdf,",".join(['"%s"'%x for x in snapGood])))
+#	f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;'%(rdf,",".join(['"%s"'%x for x in snap])))
 
 	f.write('''
 
