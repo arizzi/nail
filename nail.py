@@ -118,7 +118,7 @@ class SampleProcessing:
 
     def Requirements(self,colName):
 	if colName not in self.requirements:
-            self.requirements[colName]=self.sortedUniqueColumns(self.explicitRequirements[colName]+[y for x in self.Inputs(colName) for y in self.Requirements(x)])
+            self.requirements[colName]=self.sortedUniqueColumns(self.explicitRequirements[colName]+[y for x in self.Inputs(colName)+self.explicitRequirements[colName] for y in self.Requirements(x)])
         return self.requirements[colName]
 
 	
@@ -505,7 +505,7 @@ int main(int argc, char** argv)
 
 
 		  ftxt.write('%s,%s,%s,2000,0,2000,%s,%sWeight__Central\n'%(rdf,t,t,t,selname))
-                  f.write('histos.emplace_back(%s.Histo1D({"%s--%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
+                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                   #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
 		  for w in self.variationWeights :
 		    if self.variationWeights[w]["filter"](selname,t,w):
