@@ -1,5 +1,8 @@
 # Natual Analysis Implementation Language
 
+NAIL is a analysis language that should allow to define in an abstract way a data analsysis of a typical HEP experiment such as CMS or ATLAS.
+
+
 
 ## Data model
 The event data used is of 4 different types
@@ -13,11 +16,13 @@ Each property of singleton object is just a scalar.
 
 I.e. the data of a single event can be seen as split on an fixed size horizontal axis, with some "per object" or "per collection" grouping, and on a variable size vertical axis that is not only different event by event but also different for different objects.
 
-A naming convention is assumed so that length of vectors and collections are named _nNameOfCollection_ and properties of an object or a collection are named *NameOfCollection_property*
+The NANOAOD naming convention is assumed so that length of vectors and collections are named _nNameOfCollection_ and properties of an object or a collection are named *NameOfCollection_property*
 
 ![datamodel](image.png)
 
-## Actions
+
+
+##Event processing Actions
 
 ##### DefaultConfig
 DefaultConfig command allows to specify in one line multiple fixed values columns such as cut values that can be later variated in systematic shifts or optimization studies.
