@@ -85,6 +85,6 @@ flow.printRDFCpp(snap,debug=False,outname=sys.argv[1],selections=histosWithSyste
 
 ##
 # generate and compile with
-# python -i helloworld.py test.C && g++  -fPIC -Wall -O3 test.C $(root-config --libs --cflags)  -o test
+# python  helloworld.py test.C && g++  -fPIC -Wall -O3 test.C $(root-config --libs --cflags)  -o test
 
 
