@@ -507,7 +507,7 @@ int main(int argc, char** argv)
 
 
 		  ftxt.write('%s,%s,%s,2000,0,2000,%s,%sWeight__Central\n'%(rdf,t,t,t,selname))
-                  f.write('histos.emplace_back(%s.Histo1D({"%s--%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
+                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                   #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
 		  for w in self.variationWeights :
 		    if self.variationWeights[w]["filter"](selname,t,w):
