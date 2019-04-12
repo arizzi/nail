@@ -129,9 +129,9 @@ flow.CentralWeight("SingleLeptonEfficiency",["oneTightLepton"])
 #    * Signal Dile: 2 loose leptons, opposite charge
 flow.Define("isOS","LPair0_charge != LPair1_charge",requires=["twoLeptons"])
 flow.Selection("hasOS","Sum(isOS)")
-flow.Selection("DileptonRegion","hasOS") #this is noop
+flow.Selection("DileptonRegion","hasOS",requires=["twoJets"]) #this is noop
 #    * Signal Semi: 1 tight lepton, no second loose lepton
-flow.Selection("SemileptonRegion","nTightLepton==1 && nLepton == 1",requires=["oneTightLepton"])
+flow.Selection("SemileptonRegion","nTightLepton==1 && nLepton == 1",requires=["oneTightLepton","twoJets"])
 #    * DY control: 2 tight, closest to Z within 10 GeV of nominal Z 
 flow.DefaultConfig(ZmassWindow=10)
 flow.Selection("DYControl","nTightLepton==2 && abs(Z_mass-91.2) < ZmassWindow",requires=["oneTightLepton"])
@@ -228,6 +228,7 @@ histosPerSelection={
 "SemileptonRegion" : genericHistos,
 "DYControl" : genericHistos,
 "WControl" : genericHistos,
+"twoJets" : genericHistos,
 }
 
 systematics=["JEC%s"%x for x in range(2)] + ["MuScaleDown","MuScaleUp"]
@@ -242,5 +243,6 @@ print >> sys.stderr, "Number of known columns", len(flow.validCols)
 
 
 flow.printRDFCpp([],debug=False,outname=sys.argv[1],selections=histosWithSystematics,snap=colsToPlot,snapsel="hasOS")
+#flow.printRDFCpp([],debug=True,outname=sys.argv[1],selections=histosWithSystematics,snap=colsToPlot,snapsel="hasOS")
 
 
