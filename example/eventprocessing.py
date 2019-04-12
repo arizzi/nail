@@ -3,17 +3,18 @@ import ROOT
 import sys
 
 flow=SampleProcessing("VBF Hmumu Analysis","/scratch/mandorli/Hmumu/samplePerAndrea/GluGlu_HToMuMu_skim_nano2016.root")
+#flow.Define("LHEScaleWeight","ROOT::VecOps::RVec<float>(9,1.)") #this result in NOOP if already defined, otherwise it is a failsafe
 
 #Higgs to mumu reconstruction
 flow.Selection("hasHiggs","Sum(GenPart_pdgId == 25) > 0")
 flow.Define("GenHiggs_idx","Nonzero(GenPart_pdgId == 25)", requires=["hasHiggs"])
-flow.SubCollection("QParton","GenPart",sel="GenPart_genPartIdxMother==Take(GenPart_genPartIdxMother,GenHiggs_idx)[0] && GenPart_pdgId!= 25")
+flow.SubCollection("QParton","GenPart",sel="GenPart_genPartIdxMother==At(Take(GenPart_genPartIdxMother,GenHiggs_idx),0,-100) && GenPart_pdgId!= 25")
 flow.Define("QParton_p4","@p4v(QParton)")
 flow.Distinct("QQ","QParton")
 flow.Selection("twoQ","nQParton>=2")
 flow.Define("QQ_p4","QQ0_p4+QQ1_p4",requires=["twoQ"])
 flow.Define("QQ_mass","MemberMap(QQ_p4,M())")
-flow.Define("HighestGenQQMass","QQ_mass[Argmax(QQ_mass)]")
+flow.Define("HighestGenQQMass","At(QQ_mass,Argmax(QQ_mass),-99)")
 
 flow.DefaultConfig(muIsoCut=0.25,muIdCut=0,muPtCut=10, dzCut=0.2,dxyCut=0.05) #cuts value should not be hardcoded below but rather being declared here so that scans and optimizations are possible
 flow.Define("Muon_id","Muon_tightId*4+Muon_mediumId*2+Muon_softId") 
@@ -25,7 +26,7 @@ flow.Selection("twoMuons","nSelectedMuon>=2")
 flow.Distinct("MuMu","SelectedMuon")
 flow.Define("OppositeSignMuMu","Nonzero(MuMu0_charge != MuMu1_charge)",requires=["twoMuons"])
 flow.Selection("twoOppositeSignMuons","OppositeSignMuMu.size() > 0")
-flow.TakePair("Mu","SelectedMuon","MuMu","OppositeSignMuMu[0]",requires=["twoOppositeSignMuons"])
+flow.TakePair("Mu","SelectedMuon","MuMu","At(OppositeSignMuMu,0,-200)",requires=["twoOppositeSignMuons"])
 flow.Define("Higgs","Mu0_p4+Mu1_p4")
 
 
@@ -44,7 +45,7 @@ flow.MergeCollections("Lepton",["LooseMuon","LooseEle"])
 
 #Match jets to selected loose Leptons
 flow.Define("Jet_p4","@p4v(Jet)")
-flow.Match("Jet","Lepton")
+flow.MatchDeltaR("Jet","Lepton",defIdx=-500)
 
 #VBF Jets kinematics
 flow.DefaultConfig(jetPtCut=25)
@@ -73,7 +74,7 @@ flow.Define("NSoft2",'''SoftActivityJetNjets2-Sum(
 
 flow.Define("qq","QJet0_p4+QJet1_p4")
 flow.Define("Mqq","qq.M()")
-flow.Define("MqqGenJet","(QJet0_genJetIdx>=0&&QJet1_genJetIdx>=0&&QJet0_genJetIdx<nGenJet&&QJet1_genJetIdx<nGenJet)?(GenJet_p4[QJet0_genJetIdx]+GenJet_p4[QJet1_genJetIdx]).M():-99")
+flow.Define("MqqGenJet","(QJet0_genJetIdx>=0&&QJet1_genJetIdx>=0&&QJet0_genJetIdx<nGenJet&&QJet1_genJetIdx<nGenJet)?(At(GenJet_p4,QJet0_genJetIdx)+At(GenJet_p4,QJet1_genJetIdx)).M():-99")
 flow.Define("qq_pt","qq.Pt()")
 flow.Define("qqDeltaEta","abs(QJet0_eta-QJet1_eta)")
 flow.Define("qqDeltaPhi","abs(ROOT::Math::VectorUtil::DeltaPhi(QJet0_p4,QJet1_p4))")
@@ -94,13 +95,13 @@ flow.Selection("MassWindow","abs(Higgs.M()-nominalHMass)<higgsMassWindowWidth")
 flow.Selection("SideBand","! MassWindow")
 flow.Selection("VBFRegion","Mqq > mQQcut && QJet0_pt > 35")
 flow.Selection("SignalRegion","VBFRegion && MassWindow", requires=["VBFRegion","MassWindow"])
-flow.Selection("TwoJetsTwoMu","twoJets && twoMuons", requires=["twoJets","twoOppositeSignMuons"])
+flow.Selection("TwoJetsTwoMu","twoJets && twoOppositeSignMuons", requires=["twoJets","twoOppositeSignMuons"])
 
 #flow.Trainable("SBClassifier","evalMVA",["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"],splitMode="TripleMVA",requires="VBFRegion") 
 flow.Define("Higgs_pt","Higgs.Pt()")
 flow.Define("Higgs_m","Higgs.M()")
 flow.Define("SBClassifier","Higgs_pt+Higgs_m+Mqq+Rpt+DeltaRelQQ+NSoft2") #,inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
-flow.ObjectAt("LeadMuon","SelectedMuon","0")
-flow.ObjectAt("SubMuon","SelectedMuon","1")
+flow.ObjectAt("LeadMuon","SelectedMuon","0",requires=["twoMuons"])
+flow.ObjectAt("SubMuon","SelectedMuon","1",requires=["twoMuons"])
 
 

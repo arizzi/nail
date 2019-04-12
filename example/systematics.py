@@ -4,7 +4,7 @@ import sys
 
 
 def addLheScale(flow):
-    flow.VariationWeightArray("LHEScaleWeight",9,filt=lambda sname,hname,wname : "__syst__" not in hname and "__syst__" not in sname ) #systematic variations are 1D, let's avoid systematics of systematic
+    flow.VariationWeightArray("LHEScaleWeight",8,filt=lambda sname,hname,wname : "__syst__" not in hname and "__syst__" not in sname ) #systematic variations are 1D, let's avoid systematics of systematic
     #this is not obvious as N replicas can change... think about it
     #flow.AddVariationWeightArray("LHEPdfWeight",30,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
 

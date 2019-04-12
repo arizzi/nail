@@ -34,13 +34,24 @@ flow.printRDFCpp(snap,debug=False,outname="tmp.C",selections=histosWithSystemati
 
 #compile and process
 import os
-os.system("rm eventProcessor")
-os.system("g++ -fPIC -Wall -O3 tmp.C $(root-config --libs --cflags)  -o eventProcessor")
+#os.system("rm eventProcessor")
+#os.system("g++ -fPIC -Wall -O3 tmp.C $(root-config --libs --cflags)  -o eventProcessor")
 
-from samples import samples
-for s in samples :
+from samplesZ import samples
+def f(s):
   i=0
+  ret=1
   for f in samples[s]["files"]:
-     os.system("./eventProcessor %s %s out/%s%s "%(48,f,s,i))
+     print "Starting ",f
+     if os.system("./eventProcessor %s %s out/%s%s "%(4,f,s,i)) != 0 :
+	ret = 0
+	print "Failed",f
+	break
+     print "Done ",f
      i+=1
+  return ret
 
+from multiprocessing import Pool
+runpool = Pool(10)
+print samples.keys()
+print runpool.map(f, samples.keys() )
