@@ -3,7 +3,7 @@ import ROOT
 import sys
 
 
-flow=SampleProcessing("ttbar","/dev/shm/VBF_HToMuMu_nano2016.root")
+flow=SampleProcessing("ttbar","80CCFAD3-FF1A-0D43-BBBE-09278343E0EB.root")
 #flow=SampleProcessing("ttbar","/scratch/arizzi/TTbar.root")
 # Toy Analysis for dileptonic and semileptonic ttbar
 # * Loose Lepton selection (requires pt>20, a  Loosflag, relative isolation < 0.25)
@@ -104,9 +104,9 @@ flow.SubCollection("TightBTagged","CleanJet","CleanJet_btag > tightOp")
 #    * Medium tagged
 flow.SubCollection("MediumBTagged","CleanJet","CleanJet_btag > mediumOp")
 #    * Leading, subleading btagged jet
-flow.Define("BTagRank","Argsort(-CleanJet_btag)")
-flow.ObjectAt("LeadingBJet","CleanJet","CleanJet_btag[0]",requires=["oneJet"])
-flow.ObjectAt("SubLeadingBJet","CleanJet","CleanJet_btag[1]",requires=["twoJets"])
+#flow.Define("BTagRank","Argsort(-CleanJet_btag)")
+#flow.ObjectAt("LeadingBJet","CleanJet","At(BTagRank,0,-9)",requires=["oneJet"])
+#flow.ObjectAt("SubLeadingBJet","CleanJet","At(BTagRank,1,-9)",requires=["twoJets"])
 # * All triplets jjB 
 #    * Minimizing (Mjj-Mw)**2/(20)**2 + j1_btag+j2_btag -j3_btag
 #    * Minimizing mass diff to top nominal
@@ -116,14 +116,13 @@ flow.ObjectAt("SubLeadingBJet","CleanJet","CleanJet_btag[1]",requires=["twoJets"
 #    * Id tight, rel iso < 0.15
 flow.DefaultConfig(tightPtCut=30, tightIdCut=2,tightIso=0.15)
 flow.SubCollection("TightLepton","Lepton","Lepton_iso < tightIso && Lepton_id > tightIdCut && Lepton_pt > tightPtCut")
+flow.Selection("oneTightLepton","nTightLepton>0")
 # * Trigger eff weight
 #    * From leading lepton pt (no trigger obj matching)
-flow.ObjectAt("LeadingLepton","TightLepton","-Argsort(TightLepton_pt)")
+flow.ObjectAt("LeadingLepton","TightLepton","Argsort(-TightLepton_pt)[0]",requires=["oneTightLepton"])
 
-#TODO: how to handle different weights in different regions?
-#TODO: defaultWeight now has a dependency!!! arghhhhhh
-#flow.Define("SingleLeptonEfficiency","efficiency(LeadingLepton_pt,LeadingLepton_eta,LeadingLepton_pid)")
-#flow.AddDefaultWeight("SingleLeptonEfficiency")
+flow.Define("SingleLeptonEfficiency","efficiency(LeadingLepton_pt,LeadingLepton_eta,LeadingLepton_pid)")
+flow.CentralWeight("SingleLeptonEfficiency",["oneTightLepton"])
 
 
 # * Regions to be defined:
@@ -132,12 +131,12 @@ flow.Define("isOS","LPair0_charge != LPair1_charge",requires=["twoLeptons"])
 flow.Selection("hasOS","Sum(isOS)")
 flow.Selection("DileptonRegion","hasOS") #this is noop
 #    * Signal Semi: 1 tight lepton, no second loose lepton
-flow.Selection("SemileptonRegion","nTightLepton==1 && nLepton == 1")
+flow.Selection("SemileptonRegion","nTightLepton==1 && nLepton == 1",requires=["oneTightLepton"])
 #    * DY control: 2 tight, closest to Z within 10 GeV of nominal Z 
 flow.DefaultConfig(ZmassWindow=10)
-flow.Selection("DYControl","nTightLepton==2 && abs(Z_mass-91.2) < ZmassWindow")
+flow.Selection("DYControl","nTightLepton==2 && abs(Z_mass-91.2) < ZmassWindow",requires=["oneTightLepton"])
 #    * W+jet: 1 tight, no second loose, leading btag < medium OP
-flow.Selection("WControl","nTightLepton==1 && nLepton ==1 & nMediumBTagged==0")
+flow.Selection("WControl","nTightLepton==1 && nLepton ==1 & nMediumBTagged==0",requires=["oneTightLepton"])
 #    * Some other top selection (e.g. good candidate for mass, loose/tight lept)
 #       * ???
 
@@ -168,7 +167,7 @@ flow.CentralWeight("btagEventWeight")
 
 
 #Systematic weights
-flow.VariationWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
+flow.VariationWeightArray("LHEScaleWeight",8,filt=lambda selname,hname,wname : "__syst__" not in hname and "__syst__" not in selname) #systematic variations are 1D, let's avoid systematics of systematic
 
 #flow.AddWeightArray("LHEScaleWeight",9,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
 #this is not obvious as N replicas can change... think about it
@@ -197,13 +196,13 @@ flow.VariationWeight("btagEventWeight__syst__BTagUP","btagEventWeight")
 #		flow.AddWeight(x,filt=lambda hname,wname : "__syst__" not in hname,nodefault=True)
 
 #Define Systematic variations
-flow.Define("Muon_pt_scaleUp","Muon_pt*1.01") #this should be protected against systematic variations
-flow.Define("Muon_pt_scaleDown","Muon_pt*0.97")
+flow.Define("Muon_pt_scaleUp","Muon_pt*1.01f") #this should be protected against systematic variations
+flow.Define("Muon_pt_scaleDown","Muon_pt*0.97f")
 flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
 flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
-for i in range(50):
-  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt*(1.+(%s-24.5)/100.)"%i)
+for i in range(5):
+  flow.Define("Jet_pt_JEC%s"%i,"Jet_pt*(1.f+(%s-24.5f)/100.f)"%i)
   flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 
 # * Output results (in multiple regions, with systematics):
@@ -212,35 +211,36 @@ for i in range(50):
 #    * MHT, HT, MET, rho, tkmet, nPVs
 #    * Top and W mass in regions where it makes sense
 #    * Z(dilepton) mass in regions where it makes sense
+
+
+
 colsToPlot=["nJet","nLepton","MHT","HT","Z_mass","OSOFHM_mass","OSSFHM_mass","JJBestLike_mass","JJBestWMass_mass"]
 for attr in ["_pt","_eta"]:
   for coll in ["LooseMuon","TightLepton","LooseEle","CleanJet"]:
    colsToPlot.append(coll+attr)
 
 
-for i in range(50):
-   print >> sys.stderr, "JEC",i
-   flow.createVariationBranch("JEC%s"%i,colsToPlot)
-flow.createVariationBranch("MuScaleUp",colsToPlot)
-flow.createVariationBranch("MuScaleDown",colsToPlot)
+
+genericHistos=colsToPlot
+histosPerSelection={
+"hasOS" : genericHistos,
+"DileptonRegion": genericHistos,
+"SemileptonRegion" : genericHistos,
+"DYControl" : genericHistos,
+"WControl" : genericHistos,
+}
+
+systematics=["JEC%s"%x for x in range(2)] + ["MuScaleDown","MuScaleUp"]
+histosWithSystematics=flow.createSystematicBranches(systematics,histosPerSelection)
+
+for sel in  histosWithSystematics:
+        print sel,":",histosWithSystematics[sel]
 
 
 
-colsToPlotWithSyst=[]
-for c in colsToPlot :
-    colsToPlotWithSyst+=[x for x in flow.validCols if x[:len(c)]==c]
+print >> sys.stderr, "Number of known columns", len(flow.validCols)
 
 
-
-#flow.printRDFCpp(["GenQQ_mass","QJet_indices","QJet0","QJet1","Rpt","SBClassifier","qqDeltaEta","MqqGenJet"])
-for x in colsToPlotWithSyst :
-	flow.Histo(x)
-
-
-flow.printRDFCpp(colsToPlotWithSyst+["Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"],debug=False,selections=["hasOSSF"],outname=sys.argv[1])
-#["defaultWeight","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]+[x for x in flow.validCols if x[:len("SBClassifier")]=="SBClassifier"]+flow.inputs["SBClassifier"]+flow.weights.keys(),debug=False)
-
-
-#flow.printRDF(list(flow.allNodesTo("SBClassifier")))
+flow.printRDFCpp([],debug=False,outname=sys.argv[1],selections=histosWithSystematics,snap=colsToPlot,snapsel="hasOS")
 
 
