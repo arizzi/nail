@@ -94,7 +94,7 @@ flow.Selection("MassWindow","abs(Higgs.M()-nominalHMass)<higgsMassWindowWidth")
 flow.Selection("SideBand","! MassWindow")
 flow.Selection("VBFRegion","Mqq > mQQcut && QJet0_pt > 35")
 flow.Selection("SignalRegion","VBFRegion && MassWindow", requires=["VBFRegion","MassWindow"])
-flow.Selection("TwoJetsTwoMu","twoJets && twoMuons", requires=["twoJets","twoMuons"])
+flow.Selection("TwoJetsTwoMu","twoJets && twoMuons", requires=["twoJets","twoOppositeSignMuons"])
 
 #flow.Trainable("SBClassifier","evalMVA",["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"],splitMode="TripleMVA",requires="VBFRegion") 
 flow.Define("Higgs_pt","Higgs.Pt()")

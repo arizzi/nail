@@ -15,18 +15,18 @@ import sys
 
 #flow=SampleProcessing("VBF Hmumu Analysis","/dev/shm/VBF_HToMuMu_nano2016.root")
 #flow=SampleProcessing("VBF Hmumu Analysis","root://xrootd-cms.infn.it:1194//store/mc/RunIIFall17NanoAODv4/DYJetsToLL_2J_TuneCP5_13TeV-amcatnloFXFX-pythia8/NANOAODSIM/PU2017_12Apr2018_Nano14Dec2018_102X_mc2017_realistic_v6-v1/00000/62A8C0F2-EB7B-2D45-B7E2-35DA0D54A774.root")
-flow=SampleProcessing("VBF Hmumu Analysis","/scratch/mandorli/Hmumu/samplePerAndrea/GluGlu_HToMuMu_skim_nano2016.root")
+flow=SampleProcessing("VBF Hmumu Analysis","00346AC4-1BF1-BC41-AD23-D3D65D027293.root")#/scratch/mandorli/Hmumu/samplePerAndrea/GluGlu_HToMuMu_skim_nano2016.root")
 
 #Higgs to mumu reconstruction
 flow.Selection("hasHiggs","Sum(GenPart_pdgId == 25) > 0")
 flow.Define("GenHiggs_idx","Nonzero(GenPart_pdgId == 25)", requires=["hasHiggs"])
-flow.SubCollection("QParton","GenPart",sel="GenPart_genPartIdxMother==Take(GenPart_genPartIdxMother,GenHiggs_idx)[0] && GenPart_pdgId!= 25")
+flow.SubCollection("QParton","GenPart",sel="GenPart_genPartIdxMother==At(Take(GenPart_genPartIdxMother,GenHiggs_idx),0,-100) && GenPart_pdgId!= 25")
 flow.Define("QParton_p4","@p4v(QParton)")
 flow.Distinct("QQ","QParton")
 flow.Selection("twoQ","nQParton>=2")
 flow.Define("QQ_p4","QQ0_p4+QQ1_p4",requires=["twoQ"])
 flow.Define("QQ_mass","MemberMap(QQ_p4,M())")
-flow.Define("HighestGenQQMass","QQ_mass[Argmax(QQ_mass)]")
+flow.Define("HighestGenQQMass","At(QQ_mass,Argmax(QQ_mass),-99)")
 
 flow.DefaultConfig(muIsoCut=0.25,muIdCut=0,muPtCut=10, dzCut=0.2,dxyCut=0.05) #cuts value should not be hardcoded below but rather being declared here so that scans and optimizations are possible
 flow.Define("Muon_id","Muon_tightId*4+Muon_mediumId*2+Muon_softId") 
@@ -38,7 +38,7 @@ flow.Selection("twoMuons","nSelectedMuon>=2")
 flow.Distinct("MuMu","SelectedMuon")
 flow.Define("OppositeSignMuMu","Nonzero(MuMu0_charge != MuMu1_charge)",requires=["twoMuons"])
 flow.Selection("twoOppositeSignMuons","OppositeSignMuMu.size() > 0")
-flow.TakePair("Mu","SelectedMuon","MuMu","OppositeSignMuMu[0]",requires=["twoOppositeSignMuons"])
+flow.TakePair("Mu","SelectedMuon","MuMu","At(OppositeSignMuMu,0,-200)",requires=["twoOppositeSignMuons"])
 flow.Define("Higgs","Mu0_p4+Mu1_p4")
 
 
@@ -57,11 +57,12 @@ flow.MergeCollections("Lepton",["LooseMuon","LooseEle"])
 
 #Match jets to selected loose Leptons
 flow.Define("Jet_p4","@p4v(Jet)")
-flow.Match("Jet","Lepton")
+flow.Match("Jet","Lepton",defIdx=-500)
 
 #VBF Jets kinematics
 flow.DefaultConfig(jetPtCut=25)
-flow.SubCollection("SelectedJet","Jet","Jet_pt > jetPtCut && (Jet_LeptonIdx==-1 || Jet_LeptonDr > 0.3)")
+#flow.SubCollection("SelectedJet","Jet","Jet_pt > jetPtCut && (Jet_LeptonIdx==-1 || Jet_LeptonDr > 0.3)")
+flow.SubCollection("SelectedJet","Jet","Jet_pt > 30")
 flow.Selection("twoJets","nSelectedJet>=2")
 flow.Define("GenJet_p4","@p4v(GenJet)")
 flow.Define("SelectedJet_p4","@p4v(SelectedJet)")
@@ -86,7 +87,7 @@ flow.Define("NSoft2",'''SoftActivityJetNjets2-Sum(
 
 flow.Define("qq","QJet0_p4+QJet1_p4")
 flow.Define("Mqq","qq.M()")
-flow.Define("MqqGenJet","(QJet0_genJetIdx>=0&&QJet1_genJetIdx>=0&&QJet0_genJetIdx<nGenJet&&QJet1_genJetIdx<nGenJet)?(GenJet_p4[QJet0_genJetIdx]+GenJet_p4[QJet1_genJetIdx]).M():-99")
+flow.Define("MqqGenJet","(QJet0_genJetIdx>=0&&QJet1_genJetIdx>=0&&QJet0_genJetIdx<nGenJet&&QJet1_genJetIdx<nGenJet)?(At(GenJet_p4,QJet0_genJetIdx)+At(GenJet_p4,QJet1_genJetIdx)).M():-99")
 flow.Define("qq_pt","qq.Pt()")
 flow.Define("qqDeltaEta","abs(QJet0_eta-QJet1_eta)")
 flow.Define("qqDeltaPhi","abs(ROOT::Math::VectorUtil::DeltaPhi(QJet0_p4,QJet1_p4))")
@@ -107,7 +108,7 @@ flow.Selection("MassWindow","abs(Higgs.M()-nominalHMass)<higgsMassWindowWidth")
 flow.Selection("SideBand","! MassWindow")
 flow.Selection("VBFRegion","Mqq > mQQcut && QJet0_pt > 35")
 flow.Selection("SignalRegion","VBFRegion && MassWindow", requires=["VBFRegion","MassWindow"])
-flow.Selection("TwoJetsTwoMu","twoJets && twoMuons", requires=["twoJets","twoMuons"])
+flow.Selection("TwoJetsTwoMu","twoJets && twoOppositeSignMuons", requires=["twoJets","twoOppositeSignMuons"])
 
 #flow.Trainable("SBClassifier","evalMVA",["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"],splitMode="TripleMVA",requires="VBFRegion") 
 flow.Define("Higgs_pt","Higgs.Pt()")
@@ -119,25 +120,29 @@ flow.Define("SBClassifier","Higgs_pt+Higgs_m+Mqq+Rpt+DeltaRelQQ+NSoft2") #,input
 flow.Define("SelectedJet_btagWeight","vector_map(btagWeight,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
 flow.Define("btagEventWeight","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
 flow.CentralWeight("genWeight")
-flow.CentralWeight("btagEventWeight")
-flow.ObjectAt("LeadMuon","SelectedMuon","0")
-flow.ObjectAt("SubMuon","SelectedMuon","1")
+
+####AR ### flow.CentralWeight("btagEventWeight")
+
+
+flow.ObjectAt("LeadMuon","SelectedMuon","0",requires=["twoMuons"])
+flow.ObjectAt("SubMuon","SelectedMuon","1",requires=["twoMuons"])
 flow.Define("muEffWeight","effMu2016(LeadMuon_pt,LeadMuon_eta)*effMu2016(SubMuon_pt,SubMuon_eta)")
 flow.CentralWeight("muEffWeight",["twoMuons"])
 
 
 #Systematic weights
-flow.VariationWeightArray("LHEScaleWeight",9,filt=lambda sname,hname,wname : "__syst__" not in hname and "__syst__" not in sname ) #systematic variations are 1D, let's avoid systematics of systematic
+flow.VariationWeightArray("LHEScaleWeight",8,filt=lambda sname,hname,wname : "__syst__" not in hname and "__syst__" not in sname ) #systematic variations are 1D, let's avoid systematics of systematic
+
 #this is not obvious as N replicas can change... think about it
 #flow.AddVariationWeightArray("LHEPdfWeight",30,filt=lambda hname,wname : "__syst__" not in hname ) #systematic variations are 1D, let's avoid systematics of systematic
 
 
 #create btag systematics
 #this should be simplified
+
 flow.Define("SelectedJet_btagWeight_up","vector_map(btagWeightUp,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
 #flow.Define("btagEventWeightUp","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
 flow.Systematic("BTagUp","SelectedJet_btagWeight","SelectedJet_btagWeight_up")
-
 flow.createVariationBranch("BTagUp",["btagEventWeight"])
 flow.VariationWeight("btagEventWeight__syst__BTagUP","btagEventWeight")
 
@@ -167,11 +172,12 @@ histosPerSelection={
 "TwoJetsTwoMu" : genericHistos
 }
 
-systematics=["JEC%s"%x for x in range(5)] + ["MuScaleDown","MuScaleUp"]
+systematics= ["JEC%s"%x for x in range(5)] + ["MuScaleDown","MuScaleUp"]
+print "Da systamatik", systematics
+#systematics=["JEC0","JEC4","MuScaleDown","MuScaleUp"]
 histosWithSystematics=flow.createSystematicBranches(systematics,histosPerSelection)
-
 for sel in  histosWithSystematics:
-	print sel,":",histosWithSystematics[sel]
+	print "HISOTS:", sel,":",histosWithSystematics[sel]
 
 
 #for i in range(5):
@@ -186,8 +192,13 @@ print >> sys.stderr, "Number of known columns", len(flow.validCols)
 #	flow.Histo(x)
 
 
-snap=["SideBand","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx","VBFRegion","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","HighestGenQQMass","QJet0","QJet1","qqDeltaEta","MqqGenJet"]
+
+#flow.printRDFCpp([],debug=False,outname=sys.argv[1],selections={"twoOppositeSignMuons":["nLepton","Lepton_pt"],"twoJets":["QJet0_pt"],"SignalRegion":["Higgs_m"]},snap=["nLepton","Lepton_pt"],snapsel="twoOppositeSignMuons")
+
+#snap=["nJet","HighestGenQQMass"]
+snap=["SideBand","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx","VBFRegion","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","QJet0","QJet1","qqDeltaEta","MqqGenJet"]
 flow.printRDFCpp(snap,debug=False,outname=sys.argv[1],selections=histosWithSystematics,snap=snap,snapsel="TwoJetsTwoMu")
+#low.printRDFCpp(snap,debug=False,outname=sys.argv[1],selections=histosPerSelection,snap=snap,snapsel="TwoJetsTwoMu")
 
 
 #flow.printRDF(list(flow.allNodesTo("SBClassifier")))
