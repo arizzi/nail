@@ -117,8 +117,35 @@ ROOT::VecOps::RVec<ROOT::VecOps::RVec<size_type>> Combinations(size_type size1, 
  }
 
 
+template <typename size_type,typename size_type2,typename size_type3>
+ROOT::VecOps::RVec<ROOT::VecOps::RVec<size_type>> Combinations(size_type size1, size_type2 size2,size_type3 size3) {
+    ROOT::VecOps::RVec<ROOT::VecOps::RVec<size_type>> r(3);
+    r[0].resize(size1*size2*size3);
+    r[1].resize(size1*size2*size3);
+    r[2].resize(size1*size2*size3);
+    size_type c = 0;
+    for(size_type i=0; i<size1; i++) {
+       for(size_type j=0; j<size2; j++) {
+          for(size_type k=0; k<size3; k++) {
+             r[0][c] = i;
+             r[1][c] = j;
+             r[2][c] = k;
+             c++;
+	  }
+       }
+    }
+    return r;
+ }
+
+
+ROOT::VecOps::RVec<size_t> Range(size_t n){
+  ROOT::VecOps::RVec<size_t>  res;
+  for(size_t i=0;i<n;i++) res.push_back(i);
+  return res;
+}
+
 void loadHistograms(const ROOT::RDF::RNode &rdf, const std::string & name, std::vector<ROOT::RDF::RResultPtr<TH1D>>  & histos ){
 
 }
 
-#include "hmmtools/hmm_code.h"
+//#include "hmmtools/hmm_code.h"

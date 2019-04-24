@@ -27,7 +27,7 @@ def addMuScale(flow):
     flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
 
 def addCompleteJecs(flow):
-    for i in range(5):
+    for i in range(2):
         flow.Define("Jet_pt_JEC%s"%i,"Jet_pt+%s/100.f"%i)
         flow.Systematic("JEC%s"%i,"Jet_pt","Jet_pt_JEC%s"%i) #name, target, replacement
 

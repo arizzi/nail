@@ -2,7 +2,8 @@ from nail import *
 import ROOT
 import sys
 
-flow=SampleProcessing("VBF Hmumu Analysis","/scratch/mandorli/Hmumu/samplePerAndrea/GluGlu_HToMuMu_skim_nano2016.root")
+flow=SampleProcessing("VBF Hmumu Analysis","/scratch/arizzi/Hmm/nail/samples/6B8A2AC8-35E6-1146-B8A8-B1BA90E3F3AA.root")
+#/scratch/mandorli/Hmumu/samplePerAndrea/GluGlu_HToMuMu_skim_nano2016.root")
 #flow.Define("LHEScaleWeight","ROOT::VecOps::RVec<float>(9,1.)") #this result in NOOP if already defined, otherwise it is a failsafe
 
 #Higgs to mumu reconstruction
@@ -92,8 +93,9 @@ flow.Define("Rpt","(QJet0_p4+QJet1_p4+ Higgs).Pt()/( QJet0_p4.Pt()+QJet1_p4.Pt()
 
 flow.DefaultConfig(higgsMassWindowWidth=15,mQQcut=400,nominalHMass=125.03)
 flow.Selection("MassWindow","abs(Higgs.M()-nominalHMass)<higgsMassWindowWidth")
-flow.Selection("SideBand","! MassWindow")
 flow.Selection("VBFRegion","Mqq > mQQcut && QJet0_pt > 35")
+flow.Selection("PreSel","VBFRegion && twoOppositeSignMuons",requires=["VBFRegion","twoOppositeSignMuons"])
+flow.Selection("SideBand","! MassWindow && VBFRegion",requires=["VBFRegion"])
 flow.Selection("SignalRegion","VBFRegion && MassWindow", requires=["VBFRegion","MassWindow"])
 flow.Selection("TwoJetsTwoMu","twoJets && twoOppositeSignMuons", requires=["twoJets","twoOppositeSignMuons"])
 
