@@ -100,6 +100,7 @@ class SampleProcessing:
         self.validCols = [x[0] for x in cols]
         self.inputTypes = {x[0]: x[1] for x in cols}
         self.dftypes = dftypes
+	self.binningRules =[]
         print >> sys.stderr, "Start"
 #	print self.inputTypes
         for c, t in cols:
@@ -114,9 +115,9 @@ class SampleProcessing:
         #self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)","ROOT::Math::PtEtaPhiMVector(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
         #self.AddCodeRegex(("@p4v\(([a-zA-Z0-9_]+)\)","vector_map_t<ROOT::Math::PtEtaPhiMVector>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
         self.AddCodeRegex(("@p4\(([a-zA-Z0-9_]+)\)\[([a-zA-Z0-9_\[\]]+)\]",
-                           "ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >>(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
+                           "ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >(\\1_pt[\\2] , \\1_eta[\\2], \\1_phi[\\2], \\1_mass[\\2])"))
         self.AddCodeRegex(
-            ("@p4\(([a-zA-Z0-9_]+)\)", "ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
+            ("@p4\(([a-zA-Z0-9_]+)\)", "ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
         self.AddCodeRegex(
             ("@p4v\(([a-zA-Z0-9_]+)\)", "vector_map_t<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >	>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
         self.nodesto = {}
@@ -191,7 +192,11 @@ class SampleProcessing:
     def ObjectAt(self, name, existing, index="", requires=[]):
         self.SubCollection(name, existing, index, requires, True)
 
-    def Distinct(self, name, collection, selection="", requires=[]):
+    def Distinct(self, name, collection,  requires=[],n=2):
+	if n!=2 and n!=3:
+	    print "Not implemented n=",n #need proper Combinations or Distinct function in RDF
+	    exit(1)
+
         if collection not in self.validCols:
             if "n%s" % collection in self.validCols:
                 self.Define(collection, "ROOT::VecOps::RVec<unsigned int>(n%s,true)" %
@@ -199,10 +204,18 @@ class SampleProcessing:
             else:
                 print "Cannot find collection", collection
                 return
-        self.Define("%s_allpairs" % name, "Combinations(Nonzero(%s),Nonzero(%s))" % (
-            collection, collection), requires=requires)
-        self.Define(name, "At(%s_allpairs,0) < At(%s_allpairs,1)" %
+
+	if n==2:
+            self.Define("%s_allpairs" % name, "Combinations(Nonzero(%s),Nonzero(%s))" % (
+                 collection, collection), requires=requires)
+            self.Define(name, "At(%s_allpairs,0) < At(%s_allpairs,1)" %
                     (name, name), requires=requires)
+	else:
+            self.Define("%s_allpairs" % name, "Combinations(n%s,n%s,n%s)" % (
+                 collection, collection,collection), requires=requires)
+            self.Define(name, "At(%s_allpairs,0) < At(%s_allpairs,1) && At(%s_allpairs,1) < At(%s_allpairs,2)  " %
+                    (name, name, name, name), requires=requires)
+	
         self.Define("%s0" % name, "At(At(%s_allpairs,0),%s)" %
                     (name, name), requires=requires)
         self.Define("%s1" % name, "At(At(%s_allpairs,1),%s)" %
@@ -211,12 +224,22 @@ class SampleProcessing:
             "%s0" % name, collection, requires=requires)
         self.SubCollectionFromIndices(
             "%s1" % name, collection, requires=requires)
+	if n==3 :
+            self.Define("%s2" % name, "At(At(%s_allpairs,2),%s)" %
+                    (name, name), requires=requires)
+            self.SubCollectionFromIndices(
+                "%s2" % name, collection, requires=requires)
 
-    def TakePair(self, name, existing, pairs, index, requires=[]):
+
+
+
+    def TakePair(self, name, existing, pairs, index, requires=[],ind=[0,1]):
         self.Define("%s_indices" % (name), index, requires=requires)
-        for i in [0, 1]:
+        for i in ind:
             self.ObjectAt("%s%s" % (name, i), existing, "int(At(%s%s,%s_indices))" % (
                 pairs, i, name), requires=requires)
+    def TakeTriplet(self, name, existing, pairs, index, requires=[]):
+	self.TakePair(name, existing, pairs, index, requires,[0,1,2])
 
 #    def DefineWithWildCards(self,name,function,inputs,requires=[])
         # need for example for HLT bits
@@ -426,12 +449,11 @@ class SampleProcessing:
 
     def printRDFCpp(self, to, debug=False, outname="out.C", selections={}, snap=[], snapsel=""):
         histos = [x for y in selections for x in selections[y]]
-        to = list(set(to+histos+selections.keys()))
+        to = list(set(to+histos+[x for x in selections.keys() if x!=""]))
         sels = {self.selSetName(self.Requirements(x)): self.sortedUniqueColumns(
             self.Requirements(x)) for x in to}
 #	print "Update with",{x:self.sortedUniqueColumns(self.Requirements(x)+[x]) for x in selections}
-        sels.update({x: self.sortedUniqueColumns(
-            self.Requirements(x)+[x]) for x in selections})
+        sels.update({x: self.sortedUniqueColumns( self.Requirements(x)+[x]) for x in selections if x != ""})
 
 # AR###	selections.append("")
 
@@ -561,16 +583,20 @@ int main(int argc, char** argv)
 
                 ftxt.write('%s,%s,%s,2000,0,2000,%s,%sWeight__Central\n' %
                            (rdf, t, t, t, selname))
-                f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", 2000, 0, 2000},"%s","%sWeight__Central"));\n' % (
-                    rdf, t, s, t, s, t, selname))
+		binning="1000,0,1000"
+		for (r,b) in self.binningRules :
+		    if re.match(r,t) :
+			binning = b
+                f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
+                    rdf, t, s, t, s, binning, t, selname))
                 #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                 for w in self.variationWeights:
                     if self.variationWeights[w]["filter"](selname, t, w):
                         ww = "%sWeight__%s" % (selname, w)
                         ftxt.write('%s,%s__weight__%s,%s,1000,0,100,%s,%s\n' % (
                             rdf, t, w, t, t, ww))
-                        f.write('histos.emplace_back(%s.Histo1D({"%s%s__weight__%s", "%s {%s}", 1000, 0, 100},"%s","%s"));\n' % (
-                            rdf, t, s, w, t, s, t, ww))
+                        f.write('histos.emplace_back(%s.Histo1D({"%s%s__weight__%s", "%s {%s}", %s},"%s","%s"));\n' % (
+                            rdf, t, s, w, t, binning, s, t, ww))
 
         if snapsel == "":
             rdf = rdflast
