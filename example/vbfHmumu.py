@@ -10,10 +10,10 @@ addBtagWeight(flow)
 addMuEffWeight(flow)
 
 from systematics import *
-#addLheScale(flow)
-#addBtag(flow)
-#addMuScale(flow)
-#addCompleteJecs(flow)
+addLheScale(flow)
+addBtag(flow)
+addMuScale(flow)
+addCompleteJecs(flow)
 
 from histograms import histosPerSelection
 
@@ -30,11 +30,10 @@ print >> sys.stderr, "Number of known columns", len(flow.validCols)
 
 #snap=["SideBand","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx","VBFRegion","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","QJet0","QJet1","qqDeltaEta","MqqGenJet"]
 
-snap=[x[0] for x in flow.originalCols ]
+snap=[] #x[0] for x in flow.originalCols ]
 
 from histobinning import binningrules
 flow.binningRules = binningrules
-
 flow.printRDFCpp(snap,debug=False,outname="tmp.C",selections=histosWithSystematics,snap=snap,snapsel="PreSel")
 
 #compile and process

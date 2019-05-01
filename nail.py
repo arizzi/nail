@@ -101,6 +101,7 @@ class SampleProcessing:
         self.inputTypes = {x[0]: x[1] for x in cols}
         self.dftypes = dftypes
 	self.binningRules =[]
+	self.additionalcpp=""
         print >> sys.stderr, "Start"
 #	print self.inputTypes
         for c, t in cols:
@@ -234,9 +235,9 @@ class SampleProcessing:
 
 
     def TakePair(self, name, existing, pairs, index, requires=[],ind=[0,1]):
-        self.Define("%s_indices" % (name), index, requires=requires)
+        self.Define("%s_index" % (name), index, requires=requires)
         for i in ind:
-            self.ObjectAt("%s%s" % (name, i), existing, "int(At(%s%s,%s_indices))" % (
+            self.ObjectAt("%s%s" % (name, i), existing, "int(At(%s%s,%s_index))" % (
                 pairs, i, name), requires=requires)
     def TakeTriplet(self, name, existing, pairs, index, requires=[]):
 	self.TakePair(name, existing, pairs, index, requires,[0,1,2])
@@ -447,7 +448,7 @@ class SampleProcessing:
             code = re.sub(s, r, code)
         return code
 
-    def printRDFCpp(self, to, debug=False, outname="out.C", selections={}, snap=[], snapsel=""):
+    def printRDFCpp(self, to, debug=False, outname="out.C", selections={}, snap=[], snapsel="",lib=False):
         histos = [x for y in selections for x in selections[y]]
         to = list(set(to+histos+[x for x in selections.keys() if x!=""]))
         sels = {self.selSetName(self.Requirements(x)): self.sortedUniqueColumns(
@@ -462,7 +463,7 @@ class SampleProcessing:
 #	print "Weights to print", weights
         f = open(outname, "w")
         ftxt = open(outname[:-2]+"-data.txt", "w")
-        f.write(headerstring)
+        f.write(headerstring+self.additionalcpp)
         toprint = set(selections.keys() +
                       [x for t in to+weights for x in self.allNodesTo([t])])
 #	print "toprint:",toprint
@@ -495,7 +496,13 @@ class SampleProcessing:
                         #f.write("using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;\n"%(c,c))
                         # self.dftypes[c]="type__%s"%(c)
 
-        f.write('''
+        if lib :
+	   f.write('''
+         	using RNode = ROOT::RDF::RNode;
+		std::pair<RNode,std::vector<ROOT::RDF::RResultPtr<TH1D>> > process(RNode rdf) {
+	   ''')
+	else:
+          f.write('''
 int main(int argc, char** argv)
 {
    auto n_cores = 0;
@@ -512,7 +519,7 @@ int main(int argc, char** argv)
 
 
 ''' % self.defFN)
-        f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
+          f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
         rdf = "rdf"
         if debug:
             rdf = "rdf.Range(1000)"
@@ -596,7 +603,7 @@ int main(int argc, char** argv)
                         ftxt.write('%s,%s__weight__%s,%s,1000,0,100,%s,%s\n' % (
                             rdf, t, w, t, t, ww))
                         f.write('histos.emplace_back(%s.Histo1D({"%s%s__weight__%s", "%s {%s}", %s},"%s","%s"));\n' % (
-                            rdf, t, s, w, t, binning, s, t, ww))
+                            rdf, t, s, w, t, s, binning,  t, ww))
 
         if snapsel == "":
             rdf = rdflast
@@ -616,32 +623,14 @@ int main(int argc, char** argv)
 #		snapProt.append(t+"__safe")
             else:
                 snapGood.append(t)
-
-        f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;' % (
+	if lib :
+	  f.write(';\n return std::make_pair(%s,histos);}'%rdflast)
+	else : 
+          f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;' % (
             rdf, ",".join(['"%s"' % x for x in snapGood])))
 #	f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;'%(rdf,",".join(['"%s"'%x for x in snap])))
 
-        f.write('''
-
-//   auto tr=selection_twoMuons_twoOppositeSignMuons_twoJets.Snapshot("ot", (out+"Snap.root").c_str(), {"nJet","SBClassifier","NSoft2","event","VBFRegion","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx"});
-//   selection_twoMuons_twoOppositeSignMuons_twoJets.Report()->Print();
-
-
-
-   //   auto tr=SBClassifier_neededselection.Snapshot("ot", "outputFile.root", {"nJet","SBClassifier"});
-
-   //auto tr=toplevel.Snapshot("ot", (out+"File.root").c_str(), {"nJet","nLepton","Jet_LeptonDr","Lepton_JetDr","Jet_LeptonIdx","Jet_pt","Jet_eta","Jet_phi","Lepton_eta","Lepton_phi","Lepton_JetIdx","Lepton_jetIdx"});
-   
-/*TStopwatch s;
-   SBClassifier.OnPartialResult(0, [&s](TH1D &) {
-      std::cout << "starting event loop" << std::endl;
-      s.Start();
-      return true;
-   });
-   std::cout << "now jitting+event loop..." << std::endl;
-   *SBClassifier;
-   s.Stop();
-   std::cout << "elapsed time: " << s.RealTime() << "s" << std::endl;*/
+          f.write('''
    auto fff=TFile::Open((out+"Histos.root").c_str(),"recreate");
    for(auto h : histos) h->Write();
    fff->Write();  

@@ -3,8 +3,8 @@ genericHistos=["LeadMuon_pt","LeadMuon_eta","SubMuon_pt","SubMuon_eta","QJet0_pt
 signalHistos=["Higgs_m","SBClassifier"]
 histosPerSelection={
 "PreSel" : genericHistos+["Mqq"],
-#"SignalRegion": genericHistos+signalHistos,
-#"SideBand" : genericHistos+signalHistos,
-#"TwoJetsTwoMu" : genericHistos
+"SignalRegion": genericHistos+signalHistos,
+"SideBand" : genericHistos+signalHistos,
+"TwoJetsTwoMu" : genericHistos
 }
 
