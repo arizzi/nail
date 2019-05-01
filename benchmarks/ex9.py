@@ -11,8 +11,8 @@ flow.Selection("twoHighPtJets","Sum(Jet_pt > 40 && abs(Jet_eta) < 1.) >= 2",requ
 histos=["Jet_pt","Jet_eta","Jet_phi","nJet"]
 histosPerSelection={
 "" : histos,
-"Met20", histos,
-"twoHighPtJets",histos
+"Met20": histos,
+"twoHighPtJets":histos
 }
 
 flow.binningRules = [
