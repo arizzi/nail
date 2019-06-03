@@ -5,7 +5,6 @@
 #include <ROOT/RDataFrame.hxx>
 #include <TH1F.h>
 
-
 template <typename type>
 auto Argmax(const type & v){
  return ROOT::VecOps::Reverse(ROOT::VecOps::Argsort(v))[0];
@@ -46,7 +45,8 @@ auto matrix_map(size_t xsize, size_t ysize, size_t axis, func f, const Vec & v) 
 
 template <typename type>
 auto At(const type &v, size_t i,  typename type::value_type def){
- if(i>=v.size() || i < 0) {std::cout << "ERROR out of boundaries" << i << " vs " <<  long(i) <<  v.size() << std::endl; return def; }
+// if(i>=v.size() || i < 0) {std::cout << "ERROR out of boundaries" << i << " vs " <<  long(i) <<  v.size() << std::endl; return def; }
+ if(i>=v.size() || i < 0) { return def; }
  return v[i];
 }
 
@@ -62,6 +62,15 @@ template <typename type,typename masktype>
 auto At(const type &v, const ROOT::VecOps::RVec<masktype> &m){
  if(v.size() != m.size()) {std::cout << "ERROR mismatch mask length" << std::endl;  return  v[ROOT::VecOps::RVec<masktype>(v.size())];}
  return v[m];
+}
+
+template <typename type,typename indextype>
+auto TakeDef(const type &v, const ROOT::VecOps::RVec<indextype> &m,  typename type::value_type def){
+ type ret;
+ for(auto i : m) {
+   if(i>=0 and i < v.size()) ret.push_back(v[i]); else ret.push_back(def);
+ }
+ return ret;
 }
 
 
@@ -80,10 +89,10 @@ auto mass(const ROOT::Math::PtEtaPhiMVector &i){
 }
 
 float btagWeight(float csv,float pt,float eta){
- return 1.01;
+ return 1.0;
 }
 float btagWeightUp(float csv,float pt,float eta){
- return 1.03;
+ return 1.0;
 }
 
 float efficiency(float pt,float eta,int pid){
