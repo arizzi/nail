@@ -12,19 +12,18 @@ def addLheScale(flow):
 #create btag systematics
 #this should be simplified
 def addBtag(flow):
-    flow.Define("SelectedJet_btagWeight_up","vector_map(btagWeightUp,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
+    pass
+#    flow.Define("SelectedJet_btagWeight_up","vector_map(btagWeightUp,SelectedJet_btagCSVV2,SelectedJet_pt,SelectedJet_eta)")
     #flow.Define("btagEventWeightUp","std::accumulate(SelectedJet_btagWeight.begin(),SelectedJet_btagWeight.end(),1, std::multiplies<double>())")
-    flow.Systematic("BTagUp","SelectedJet_btagWeight","SelectedJet_btagWeight_up")
-    flow.createVariationBranch("BTagUp",["btagEventWeight"])
-    flow.VariationWeight("btagEventWeight__syst__BTagUP","btagEventWeight")
+#    flow.Systematic("BTagUp","SelectedJet_btagWeight","SelectedJet_btagWeight_up")
+#    flow.createVariationBranch("BTagUp",["btagEventWeight"])
+#    flow.VariationWeight("btagEventWeight__syst__BTagUP","btagEventWeight")
 
 
 def addMuScale(flow):
 #Define Systematic variations
-    flow.Define("Muon_pt_scaleUp","Muon_pt*1.01f") #this should be protected against systematic variations
-    flow.Define("Muon_pt_scaleDown","Muon_pt*0.97f")
-    flow.Systematic("MuScaleDown","Muon_pt","Muon_pt_scaleDown") #name, target, replacement
-    flow.Systematic("MuScaleUp","Muon_pt","Muon_pt_scaleUp") #name, target, replacement
+    flow.Systematic("MuScaleDown","Muon_corrected_pt","Muon_correctedDown_pt") #name, target, replacement
+    flow.Systematic("MuScaleUp","Muon_corrected_pt","Muon_correctedUp_pt") #name, target, replacement
 
 def addCompleteJecs(flow):
     for i in range(2):

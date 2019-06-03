@@ -9,7 +9,7 @@ samples={
 "STwt": {"files":["/scratch/arizzi/giulio/ST_tW_top_nano2017.root"],"xsec":35.85},
 "STtbar": {"files":["/scratch/arizzi/giulio/ST_t_antitop_nano2017.root"],"xsec":80.95}, ##or 26.38!??
 "STt": {"files":["/scratch/arizzi/giulio/ST_t_top_nano2017.root"],"xsec":136.02}, ##or 44.33
-"data": {"files":["/scratch/arizzi/giulio/SingleMuon_nano2017.root"],"xsec":1},
+"data": {"files":["/scratch/arizzi/giulio/SingleMuon_nano2017.root"],"lumi":35900.,"data":True},
 "TTlep": {"files":["/scratch/arizzi/giulio/TTTo2L2Nu_nano2017.root"],"xsec":85.65},
 "TThad": {"files":["/scratch/arizzi/giulio/TTToHadronic_nano2017.root"],"xsec":366.20181056},
 "TTsemi": {"files":["/scratch/arizzi/giulio/TTToSemiLeptonic_nano2017.root"],"xsec":356.18677888},

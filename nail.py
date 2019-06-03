@@ -126,6 +126,10 @@ class SampleProcessing:
         self.nodesto = {}
 #	self.Define("defaultWeight","1.")
 
+    def AddCppCode(self, code) :
+	headerstring+=code
+	ROOT.gInterpreter.Declare(code) 
+
     def Inputs(self, colName):
         if colName not in self.inputs:
             #	    print "parse! ", colName

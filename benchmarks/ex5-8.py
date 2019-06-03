@@ -40,7 +40,7 @@ flow.Define("isOSSF","LPair0_charge != LPair1_charge && LPair0_pid == LPair1_pid
 flow.Selection("hasOSSF","Sum(isOSSF) > 0")
 flow.TakePair("Z","Lepton","LPair","Argmax(-abs(MemberMap((LPair0_p4+LPair1_p4),M() )*isOSSF-91.2))",requires=["hasOSSF"])
 flow.Selection("threeLeptons","nLepton>=3",requires=["twoLeptons","hasOSSF"]) 
-flow.SubCollection("ResidualLeptons","Lepton",sel="Lepton_index != LPair0[Z_index] && Lepton_index != LPair1[Z_indices]",requires=["threeLeptons"])
+flow.SubCollection("ResidualLeptons","Lepton",sel="Lepton_index != LPair0[Z_index] && Lepton_index != LPair1[Z_index]",requires=["threeLeptons"])
 flow.ObjectAt("ResidualLepton","ResidualLeptons","Argmax(ResidualLeptons_pt)")
 flow.Define("MET_eta","0.f")
 flow.Define("MET_mass","0.f")
