@@ -18,7 +18,6 @@ headerstring = '''
 '''
 
 
-ROOT.gInterpreter.Declare(headerstring)
 
 
 def returnType(code, function):
@@ -74,11 +73,14 @@ class SampleProcessing:
                        for x in e.GetListOfBranches()]
         df = ROOT.RDataFrame("Events", filename)
         dftypes = {x[0]: df.GetColumnType(x[0]) for x in allbranches}
+        allbranches.append(("isMC","bool"))
+        dftypes["isMC"]="bool"
         self.init(name, allbranches, dftypes)
         self.defFN = filename
         self.dupcode = False
 
     def init(self, name, cols, dftypes):
+        ROOT.gInterpreter.Declare(headerstring)
         self.name = name
         self.lazyParse = True
         self.cols = {}
@@ -305,9 +307,9 @@ class SampleProcessing:
     def MatchDeltaR(self, name1, name2, embed=([], []), defIdx=-1, defVal=-99):
         name = name1+name2+"Pair"
         self.Define(name, "Combinations(n%s,n%s)" % (name1, name2))
-        # self.Define("%s_dr"%name,"vector_map(P4DELTAR,Take(%s_p4,At(%s,0)),Take(%s_p4,At(%s,1)))"%(name1,name,name2,name))
-        self.Define("%s_dr" % name, "DeltaR(Take(%s_eta,At(%s,0)),Take(%s_eta,At(%s,1)),Take(%s_phi,At(%s,0)),Take(%s_phi,At(%s,1))  )" % (
-            name1, name, name2, name, name1, name, name2, name))
+        self.Define("%s_dr"%name,"vector_map(P4DELTAR,Take(%s_p4,At(%s,0)),Take(%s_p4,At(%s,1)))"%(name1,name,name2,name))
+#        self.Define("%s_dr" % name, "DeltaR(Take(%s_eta,At(%s,0)),Take(%s_eta,At(%s,1)),Take(%s_phi,At(%s,0)),Take(%s_phi,At(%s,1))  )" % (
+#            name1, name, name2, name, name1, name, name2, name))
         self.Define("%s_%sDr" % (name1, name2),
                     "matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_dr)" % (name1, name2, defVal, name))
         self.Define("%s_%sDr" % (name2, name1),
@@ -473,7 +475,7 @@ class SampleProcessing:
                 #	    print '.... doing..',c
                 if c in self.obs or c in self.selections:
                     if self.code[c] != "":
-                        inputs = ""
+                        inputs = "unsigned int __slot "
                         for i in self.Inputs(c):
                             if inputs != "":
                                 inputs += ", "
@@ -498,8 +500,11 @@ class SampleProcessing:
 
         if lib :
 	   f.write('''
+#include "ext.h"
          	using RNode = ROOT::RDF::RNode;
-		std::pair<RNode,std::vector<ROOT::RDF::RResultPtr<TH1D>> > process(RNode rdf) {
+                //std::pair<RNode,std::vector<ROOT::RDF::RResultPtr<TH1D>> > processRDF(RNode rdf) {
+                //std::pair<RNode,std::vector<int>> processRDF(RNode rdf) {
+                Result processRDF(RNode rdf) {
 	   ''')
 	else:
           f.write('''
@@ -529,10 +534,10 @@ int main(int argc, char** argv)
             if c in toprint:
                 if c in self.obs or c in self.selections:
                     if self.code[c] != "":
-                        f.write('%s.Define("%s",func__%s,{%s})\n' % (
+                        f.write('%s.DefineSlot("%s",func__%s,{%s})\n' % (
                             rdf, c, c, ",".join(['"%s"' % x for x in self.Inputs(c)])))
                     else:
-                        f.write('%s.Define("%s",func__%s,{%s})\n' % (
+                        f.write('%s.DefineSlot("%s",func__%s,{%s})\n' % (
                             rdf, c, self.originals[c], ",".join(['"%s"' % x for x in self.Inputs(c)])))
                     rdf = "rdf%s" % i
                     i += 1
@@ -624,7 +629,9 @@ int main(int argc, char** argv)
             else:
                 snapGood.append(t)
 	if lib :
-	  f.write(';\n return std::make_pair(%s,histos);}'%rdflast)
+          f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdflast)
+#          f.write(';\n return std::pair<RNode,std::vector<int> >(%s,std::vector<int>());}'%rdflast)
+#	  f.write(';\n return %s;}'%rdflast)
 	else : 
           f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;' % (
             rdf, ",".join(['"%s"' % x for x in snapGood])))
