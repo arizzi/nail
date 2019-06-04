@@ -36,6 +36,7 @@ snaplist=["QJet0_pt","QJet1_pt","QJet0_eta","QJet1_eta","Mqq","Higgs_pt","twoJet
 from histobinning import binningrules
 flow.binningRules = binningrules
 flow.printRDFCpp(snaplist,debug=False,outname="tmp.C",selections=histosWithSystematics,snap=snap,snapsel="PreSel",lib=True)
+flow.printRDFCpp(snaplist,debug=False,outname="tmp1.C",selections=histosWithSystematics,snap=snap,snapsel="PreSel",lib=True)
 
 #compile and process
 import os

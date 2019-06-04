@@ -91,8 +91,8 @@ class SampleProcessing:
                        for x in e.GetListOfBranches()]
         df = ROOT.RDataFrame("Events", filename)
         dftypes = {x[0]: df.GetColumnType(x[0]) for x in allbranches}
-        allbranches.append(("isMC","bool"))
-        dftypes["isMC"]="bool"
+#        allbranches.append(("isMC","bool"))
+#        dftypes["isMC"]="bool"
         self.init(name, allbranches, dftypes)
         self.defFN = filename
         self.dupcode = False
@@ -143,6 +143,18 @@ class SampleProcessing:
             ("@p4v\(([a-zA-Z0-9_]+)\)", "vector_map_t<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float> >	>(\\1_pt , \\1_eta, \\1_phi, \\1_mass)"))
         self.nodesto = {}
 #	self.Define("defaultWeight","1.")
+
+
+    def AddExpectedInput(self, name,ctype):
+        if name in self.validCols:
+	    print "Attempting to add a known input", name," => noop"
+	    return
+        self.validCols.append(name) 
+        self.inputTypes[name]=ctype
+	self.inputs[name]=[]
+        self.requirements[name]=[]
+	self.originalCols.append((name,ctype))
+	self.dftypes[name]=ctype
 
     def AddCppCode(self, code) :
 	headerstring+=code
@@ -329,9 +341,9 @@ class SampleProcessing:
     def MatchDeltaR(self, name1, name2, embed=([], []), defIdx=-1, defVal=-99):
         name = name1+name2+"Pair"
         self.Define(name, "Combinations(n%s,n%s)" % (name1, name2))
-        self.Define("%s_dr"%name,"vector_map(P4DELTAR,Take(%s_p4,At(%s,0)),Take(%s_p4,At(%s,1)))"%(name1,name,name2,name))
-#        self.Define("%s_dr" % name, "DeltaR(Take(%s_eta,At(%s,0)),Take(%s_eta,At(%s,1)),Take(%s_phi,At(%s,0)),Take(%s_phi,At(%s,1))  )" % (
-#            name1, name, name2, name, name1, name, name2, name))
+#        self.Define("%s_dr"%name,"vector_map(P4DELTAR,Take(%s_p4,At(%s,0)),Take(%s_p4,At(%s,1)))"%(name1,name,name2,name))
+        self.Define("%s_dr" % name, "DeltaR(Take(%s_eta,At(%s,0)),Take(%s_eta,At(%s,1)),Take(%s_phi,At(%s,0)),Take(%s_phi,At(%s,1))  )" % (
+            name1, name, name2, name, name1, name, name2, name))
         self.Define("%s_%sDr" % (name1, name2),
                     "matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_dr)" % (name1, name2, defVal, name))
         self.Define("%s_%sDr" % (name2, name1),
@@ -668,7 +680,7 @@ int main(int argc, char** argv)
             else:
                 snapGood.append(t)
 	if lib :
-          f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdflast)
+          f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdf)
 #          f.write(';\n return std::pair<RNode,std::vector<int> >(%s,std::vector<int>());}'%rdflast)
 #	  f.write(';\n return %s;}'%rdflast)
 	else : 

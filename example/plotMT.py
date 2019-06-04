@@ -1,6 +1,8 @@
 import ROOT
-from samples2016Z import samples
-from models import *
+#from samples2016 import samples
+from samples2017 import samples #as samples2
+#samples.update(samples2)
+from models2017H import *
 from math import *
 ROOT.gROOT.ProcessLine(".x setTDRStyle.C")
 import re
@@ -61,7 +63,7 @@ for group in data :
     for d in data[group] :
         f[d]=ROOT.TFile.Open("out/%sHistos.root"%d)
 
-histoNames=[x.GetName() for x in f["WZ3l1n"].GetListOfKeys() ]
+histoNames=[x.GetName() for x in f["data"].GetListOfKeys() ]
 canvas={}
 datastack={}
 datasum={}
@@ -182,8 +184,9 @@ def makeplot(hn):
        datasum[hn].SetBinContent(i,0)
        print "blinded",i,hn
    canvas[hn].cd(1)
-   histos[hn].Draw("hist")
-   histos[hn].GetXaxis().SetTitle(hn)
+   datastack[hn].Draw("E P")
+   datastack[hn].GetXaxis().SetTitle(hn)
+   histos[hn].Draw("hist same")
    datastack[hn].Draw("E P same")
    datastack[hn].GetHistogram().SetMarkerStyle(20)
 
@@ -199,11 +202,12 @@ def makeplot(hn):
    ratio.Draw()
    ratio.SetAxisRange(-0.5,0.5,"Y")
    ratio.GetYaxis().SetNdivisions(5)
-   for sy in systematicsToPlot:
+   for j,sy in enumerate(systematicsToPlot):
        ratiosy=histosumSyst[hn][sy].Clone()
        ratiosy.Add(histosum[hn],-1.)
        ratiosy.Divide(histosum[hn])
-       ratiosy.SetLineColor(4)
+       ratiosy.SetLineColor(4+i)
+       ratiosy.SetLineStyle(i)
        ratiosy.SetFillStyle(0)
        ratiosy.Draw("same,hist")
        print "Heu",hn,sy,histosumSyst[hn][sy].Integral(),histosum[hn].Integral()

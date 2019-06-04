@@ -5,8 +5,8 @@ signalHistosZ=["Higgs_m","SBClassifierZ","BDTAtanZ","Higgs_m_uncalib","Mqq_log",
 histosPerSelection={
 "PreSel" : genericHistos+["Mqq"],
 "SignalRegion": genericHistos+signalHistos,
-"SignalRegionZ": genericHistos+signalHistosZ,
-"SignalRegionZNadya": genericHistos+signalHistosZ,
+"ZRegion": genericHistos+signalHistosZ,
+"ZRegionNadya": genericHistos+signalHistosZ,
 "SideBand" : genericHistos+signalHistos,
 #"TwoJetsTwoMu" : genericHistos
 }
