@@ -1,7 +1,7 @@
 import ROOT
 import clang.cindex
 import re
-import sys
+import os,sys
 import copy
 from clang.cindex import CursorKind
 from clang.cindex import Index
@@ -15,19 +15,37 @@ headerstring = '''
 #define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
 #define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>,ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>> 
 //ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
+#include <vector>
+#include <utility>
+using RNode = ROOT::RDF::RNode;
+struct Result {
+ Result(RNode  rdf_): rdf(rdf_){}
+ RNode rdf;
+ ROOT::RDF::RResultPtr<TH1D> histo;
+ std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;
+};
+template <typename T>
+class NodeCaster {
+   public:
+    static ROOT::RDF::RNode Cast(T rdf)
+    {
+              return ROOT::RDF::RNode(rdf);
+    }
+};
 '''
 
 
 
-
+knownTypes={}
 def returnType(code, function):
-    myFuncCode = code
-    ROOT.gInterpreter.Declare(myFuncCode)
-    getTypeNameF = "auto %s_typestring=ROOT::Internal::RDF::TypeID2TypeName(typeid(ROOT::TypeTraits::CallableTraits<decltype(%s)>::ret_type));" % (
+    if function not in knownTypes :
+      myFuncCode = code
+      ROOT.gInterpreter.Declare(myFuncCode)
+      getTypeNameF = "auto %s_typestring=ROOT::Internal::RDF::TypeID2TypeName(typeid(ROOT::TypeTraits::CallableTraits<decltype(%s)>::ret_type));" % (
         function, function)
-    ROOT.gInterpreter.ProcessLine(getTypeNameF)
-    return getattr(ROOT, "%s_typestring" % function)
-
+      ROOT.gInterpreter.ProcessLine(getTypeNameF)
+      knownTypes[function]=getattr(ROOT, "%s_typestring" % function)
+    return knownTypes[function]
 
 whatever = '''  idx = clang.cindex.Index.create()
   tu = idx.parse('tmp.cpp', args=['-std=c++14'], unsaved_files=[('tmp.cpp', headerstring+code)],  options=0)
@@ -369,6 +387,25 @@ class SampleProcessing:
         self.histos[name] = {}
         self.histos["bin"] = binHint
 
+
+    def CreateProcessor(self,name,outnodes,selections,snap,snapsel,nthreads=0):
+	self.printRDFCpp(outnodes,debug=False,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
+        import filecmp
+        if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C",name+"_autogen.C") :
+		os.system("cp tmp.C %s_autogen.C"%name)
+	        os.system("rm %s_autogen.so"%name)
+        	os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
+	ROOT.gInterpreter.Declare('''
+	Result %s_nail(RNode rdf, int nThreads);
+	'''%name)
+        ROOT.gROOT.ProcessLine('''
+        ROOT::EnableImplicitMT(%s);
+        '''%nthreads)
+	ROOT.gSystem.Load(name+"_autogen.so")
+        CastToRNode= lambda node: ROOT.NodeCaster(node.__cppname__).Cast(node)
+	return (lambda rdf: getattr(ROOT,name+"_nail")(CastToRNode(rdf),nthreads) )
+
+
     def recursiveGetWeights(self, sel):
         #	print "Weights for",sel
         #	if "__syst__" in sel :
@@ -454,7 +491,7 @@ class SampleProcessing:
             code = re.sub(s, r, code)
         return code
 
-    def printRDFCpp(self, to, debug=False, outname="out.C", selections={}, snap=[], snapsel="",lib=False):
+    def printRDFCpp(self, to, debug=False, outname="out.C", selections={}, snap=[], snapsel="",lib=False,libname=""):
         histos = [x for y in selections for x in selections[y]]
         to = list(set(to+histos+[x for x in selections.keys() if x!=""]))
         sels = {self.selSetName(self.Requirements(x)): self.sortedUniqueColumns(
@@ -504,12 +541,10 @@ class SampleProcessing:
 
         if lib :
 	   f.write('''
-#include "ext.h"
-         	using RNode = ROOT::RDF::RNode;
-                //std::pair<RNode,std::vector<ROOT::RDF::RResultPtr<TH1D>> > processRDF(RNode rdf) {
-                //std::pair<RNode,std::vector<int>> processRDF(RNode rdf) {
-                Result processRDF(RNode rdf) {
-	   ''')
+Result %s_nail(RNode rdf,int nThreads) {
+     ROOT::EnableImplicitMT(nThreads);
+
+	   '''%libname)
 	else:
           f.write('''
 int main(int argc, char** argv)
@@ -792,9 +827,9 @@ int main(int argc, char** argv)
                             replacedweights = [
                                 (c if c not in repdict else repdict[c]) for c in self.centralWeights[x]]
                             self.centralWeights[x_syst] = replacedweights
-
 #	 print "Recomputing for",res
         return res
+
 
     def createSystematicBranches(self, systematics, selWithHistos):
         res = copy.deepcopy(selWithHistos)
@@ -811,6 +846,7 @@ int main(int argc, char** argv)
                                    "__syst__"+syst not in histos]  # copy.deepcopy(res[sel])
                 res[selKey] += histos
         return res
+
 
 
 class AnalysisYields:
