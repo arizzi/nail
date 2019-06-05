@@ -17,6 +17,8 @@ headerstring = '''
 //ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
 #include <vector>
 #include <utility>
+#ifndef NAILSTUFF
+#define NAILSTUFF
 using RNode = ROOT::RDF::RNode;
 struct Result {
  Result(RNode  rdf_): rdf(rdf_){}
@@ -32,6 +34,7 @@ class NodeCaster {
               return ROOT::RDF::RNode(rdf);
     }
 };
+#endif
 '''
 
 
@@ -285,7 +288,7 @@ class SampleProcessing:
 #	pass
 
     def Define(self, name, code, inputs=[], requires=[], original=""):
-        print >> sys.stderr, name
+     #   print >> sys.stderr, name
         if name not in self.validCols:
             #	if name not in self.validCols or name[:len(defaultWeight)]=="defaultWeight":
             #	    if name[:len(defaultWeight)] == "defaultWeight" and name in self.validCols:
@@ -625,7 +628,6 @@ int main(int argc, char** argv)
                     selname = s
                     sellist = self.Requirements(s)+[s]
 #		      print "making ",t, "in",selname
-
                 if selname != "":
                     #                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.requirements[t]))
                     if selname not in selsprinted:
@@ -656,9 +658,9 @@ int main(int argc, char** argv)
                 for w in self.variationWeights:
                     if self.variationWeights[w]["filter"](selname, t, w):
                         ww = "%sWeight__%s" % (selname, w)
-                        ftxt.write('%s,%s__weight__%s,%s,1000,0,100,%s,%s\n' % (
+                        ftxt.write('%s,%s__syst__%s,%s,1000,0,100,%s,%s\n' % (
                             rdf, t, w, t, t, ww))
-                        f.write('histos.emplace_back(%s.Histo1D({"%s%s__weight__%s", "%s {%s}", %s},"%s","%s"));\n' % (
+                        f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
                             rdf, t, s, w, t, s, binning,  t, ww))
 
         if snapsel == "":

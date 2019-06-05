@@ -12,8 +12,10 @@ totevCount={}
 totevSkim={}
 hnForSys={}
 def findSyst(hn,sy,f) :
-    if hn in hnForSys:
-	return hnForSys[hn]
+    if hn in hnForSys and sy in hnForSys[hn]:
+	return hnForSys[hn][sy]
+    if hn not in hnForSys :
+	hnForSys[hn]={}
     allh=list([x.GetName() for x in f.GetListOfKeys()])
     h1=hn+"__syst__"+sy    
     h2=re.sub("___","__syst__"+sy+"___",hn)    
@@ -47,7 +49,7 @@ def totevents(s):
 	    run.Project("hw","1","genEventCount")
 	    totevCount[s]+=hw.GetSumOfWeights()
 	    print totev[s]
-    print "returning",totev[s], "for",s
+#    print "returning",totev[s], "for",s
     return totev[s]
 
 
@@ -80,6 +82,7 @@ histoSigsumSyst={}
 ROOT.gStyle.SetOptStat(0)
 def makeplot(hn):
  if "__syst__" not in hn and "LHE" not in hn :
+   print "Making histo",hn
    histos[hn]=ROOT.THStack(hn,hn) 
    histosSig[hn]=ROOT.THStack(hn,hn) 
    datastack[hn]=ROOT.THStack(hn,hn) 
@@ -100,8 +103,8 @@ def makeplot(hn):
 	   datastack[hn].Add(h)
 	   if hn not in datasum :
 		datasum[hn]=h.Clone()
+		datasumSyst[hn]={}
    		for sy in systematicsToPlot :
-		  datasumSyst[hn]={}
                   datasumSyst[hn][sy]=h.Clone()
 	   else :
 		datasum[hn].Add(h)	
@@ -127,9 +130,14 @@ def makeplot(hn):
 #	   i+=1
 	   if hn not in histosum :
 		histosum[hn]=h.Clone()
+		histosumSyst[hn]={}
    		for sy in systematicsToPlot :
-		  histosumSyst[hn]={}
-                  histosumSyst[hn][sy]=h.Clone()
+      		  hs=f[b].Get(findSyst(hn,sy,f[b]))
+	          if hs:
+        	     hs.Scale(samples[b]["xsec"]/nevents*lumitot)
+	             histosumSyst[hn][sy]=hs.Clone()
+		  else :
+                     histosumSyst[hn][sy]=h.Clone()
 	   else :
 		histosum[hn].Add(h)	
    		for sy in systematicsToPlot :
@@ -138,6 +146,7 @@ def makeplot(hn):
 	   	    hs.Scale(samples[b]["xsec"]/nevents*lumitot)
                     histosumSyst[hn][sy].Add(hs)
 		  else :
+		    print "using unchanged histo"
                     histosumSyst[hn][sy].Add(h)
 	   histos[hn].Add(h)
 
@@ -155,13 +164,19 @@ def makeplot(hn):
  #          i+=1
            if hn not in histoSigsum :
                 histoSigsum[hn]=h.Clone()
+		histoSigsumSyst[hn]={}
    		for sy in systematicsToPlot :
-		  histoSigsumSyst[hn]={}
-                  histoSigsumSyst[hn][sy]=h.Clone()
+                  hs=f[b].Get(findSyst(hn,sy,f[b]))
+                  if hs:
+                    hs.Scale(samples[b]["xsec"]/nevents*lumitot)
+                    histoSigsumSyst[hn][sy]=hs.Clone()
+                  else :
+	            histoSigsumSyst[hn][sy]=h.Clone()
+
            else :
                 histoSigsum[hn].Add(h)
    		for sy in systematicsToPlot :
-		  hs=f[b].Get(findSyst(hn,sy,f[d]))
+		  hs=f[b].Get(findSyst(hn,sy,f[b]))
 		  if hs:
            	    hs.Scale(samples[b]["xsec"]/nevents*lumitot)
                     histoSigsumSyst[hn][sy].Add(hs)
@@ -202,15 +217,16 @@ def makeplot(hn):
    ratio.Draw()
    ratio.SetAxisRange(-0.5,0.5,"Y")
    ratio.GetYaxis().SetNdivisions(5)
+   ratiosy=[]
    for j,sy in enumerate(systematicsToPlot):
-       ratiosy=histosumSyst[hn][sy].Clone()
-       ratiosy.Add(histosum[hn],-1.)
-       ratiosy.Divide(histosum[hn])
-       ratiosy.SetLineColor(4+i)
-       ratiosy.SetLineStyle(i)
-       ratiosy.SetFillStyle(0)
-       ratiosy.Draw("same,hist")
-       print "Heu",hn,sy,histosumSyst[hn][sy].Integral(),histosum[hn].Integral()
+       ratiosy.append(histosumSyst[hn][sy].Clone())
+       ratiosy[-1].Add(histosum[hn],-1.)
+       ratiosy[-1].Divide(histosum[hn])
+       ratiosy[-1].SetLineColor(1+j)
+       ratiosy[-1].SetLineStyle(j)
+       ratiosy[-1].SetFillStyle(0)
+       ratiosy[-1].Draw("same hist")
+       print "Heu",hn,sy,histosumSyst[hn][sy].Integral(),histosum[hn].Integral(),lumitot,ratiosy[-1]
 #   systematics=[x for x in histoNames if x[:hn.find("___")]==hn[:hn.find("___")] and "__syst__" in x]
 #   print "available systematics",hn,systematics
 #  for s in systematics:
@@ -222,14 +238,18 @@ def makeplot(hn):
    canvas[hn].SaveAs("%s_log.png"%hn)	   
 
 
+his=[x for x in histoNames if "__syst__" not in x]
+print his[0]
+makeplot(his[0]) #do once for caching normalizations
 
-makeplot(histoNames[0]) #do once for caching normalizations
-
-from multiprocessing import Pool
-runpool = Pool(10)
-#toproc=[(x,y,i) for y in sams for i,x in enumerate(samples[y]["files"])]
-runpool.map(makeplot, histoNames[1:])
-
+if True:
+ from multiprocessing import Pool
+ runpool = Pool(3)
+ #toproc=[(x,y,i) for y in sams for i,x in enumerate(samples[y]["files"])]
+ runpool.map(makeplot, his[1:])
+else :
+ for x in his[1:] :
+    makeplot(x)
 
 tot=0
 for s in totevCount:

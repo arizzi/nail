@@ -1,3 +1,5 @@
+#ifndef MVA_H
+#define MVA_H
 #include "TMVA/Factory.h"
 #include "TMVA/Tools.h"
 #include "TMVA/Reader.h"
@@ -34,3 +36,4 @@ float eval(unsigned int i,std::vector<float> f){
 };
 
 MVAWrapper mva;
+#endif

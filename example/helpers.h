@@ -1,3 +1,5 @@
+#ifndef HELPERS_H
+#define HELPERS_H
 #include <TFile.h>
 #include <Math/VectorUtil.h>
 #include <ROOT/RVec.hxx>
@@ -157,5 +159,4 @@ ROOT::VecOps::RVec<size_t> Range(size_t n){
 void loadHistograms(const ROOT::RDF::RNode &rdf, const std::string & name, std::vector<ROOT::RDF::RResultPtr<TH1D>>  & histos ){
 
 }
-
-//#include "hmmtools/hmm_code.h"
+#endif

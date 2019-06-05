@@ -11,6 +11,9 @@ flow=SampleProcessing("VBF Hmumu Analysis","/scratch/mandorli/Hmumu/fileSkimFrom
 flow.AddExpectedInput("year","int")
 flow.AddExpectedInput("isMC","bool")
 
+flow.Define("LHEScaleWeightSafe","nLHEScaleWeight>=8?LHEScaleWeight:std::vector<float>(9,1)")
+
+
 #Higgs to mumu reconstruction
 flow.Selection("hasHiggs","Sum(GenPart_pdgId == 25) > 0")
 flow.Define("GenHiggs_idx","Nonzero(GenPart_pdgId == 25)", requires=["hasHiggs"])
@@ -51,14 +54,14 @@ flow.Define("Jet_p4","vector_map_t<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPh
 #VBF Jets kinematics
 flow.DefaultConfig(jetPtCut=25)
 flow.SubCollection("SelectedJet","Jet",'''
-(year != 2017 || isMC ||  Jet_pt_nom > 50 || abs(Jet_eta) < 2.7 || abs(Jet_eta) > 3.0 ||  Jet_neEmEF<0.55 ) && 
+(year != 2017 ||  Jet_pt_nom > 50 || abs(Jet_eta) < 2.7 || abs(Jet_eta) > 3.0 ||  Jet_neEmEF<0.55 ) && 
 Jet_pt_nom > jetPtCut && Jet_puId >0 &&  Jet_jetId > 0 && abs(Jet_eta) < 4.7 && (abs(Jet_eta)<2.5 || Jet_puId > 6) && 
 (Jet_muonIdx1==-1 || TakeDef(Muon_pfRelIso04_all,Jet_muonIdx1,100) > 0.25 || abs(TakeDef(Muon_dz,Jet_muonIdx1,100)) > 0.2 || abs(TakeDef(Muon_dxy,Jet_muonIdx1,100) > 0.05)) &&
 (Jet_muonIdx2==-1 || TakeDef(Muon_pfRelIso04_all,Jet_muonIdx2,100) > 0.25 || abs(TakeDef(Muon_dz,Jet_muonIdx2,100)) > 0.2 || abs(TakeDef(Muon_dxy,Jet_muonIdx2,100) > 0.05)) 
 ''')
 flow.Selection("twoJets","nSelectedJet>=2")
 flow.Define("GenJet_p4","@p4v(GenJet)")
-flow.Define("SelectedJet_p4","@p4v(SelectedJet)")
+#flow.Define("SelectedJet_p4","@p4v(SelectedJet)")
 flow.Distinct("JetPair","SelectedJet")
 #flow.TakePair("QJet","SelectedJet","JetPair","Argmax(MemberMap((JetPair0_p4+JetPair1_p4),M() ))",requires=["twoJets"])
 flow.Define("SortedSelectedJetIndices","Argsort(-SelectedJet_pt_nom)")
@@ -154,9 +157,9 @@ flow.Selection("ZRegionNadya","VBFRegion && MassWindowZ && QJet0_pt_nom> 50 && Q
 flow.Selection("TwoJetsTwoMu","twoJets && twoOppositeSignMuons", requires=["twoJets","twoOppositeSignMuons"])
 
 flow.Define("SBClassifier","mva.eval(__slot,{Higgs_m,Mqq_log,mmjj_pt_log,qqDeltaEta,float(NSoft5),ll_zstarbug_log,Higgs_pt,theta2,mmjj_pz_logabs,MaxJetAbsEta})") #,inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
-flow.Define("SBClassifierZ","mva.eval(__slot,{125.,Mqq_log,mmjj_pt_log,qqDeltaEta,float(NSoft5),ll_zstarbug_log,Higgs_pt,theta2,mmjj_pz_logabs,MaxJetAbsEta})") #,inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
+flow.Define("SBClassifierNoMass","mva.eval(__slot,{125.,Mqq_log,mmjj_pt_log,qqDeltaEta,float(NSoft5),ll_zstarbug_log,Higgs_pt,theta2,mmjj_pz_logabs,MaxJetAbsEta})") #,inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
 #flow.Define("SBClassifierZ","mva.eval({125.,log(Mqq),mmjj.Pt(),qqDeltaEta,float(NSoft5),ll_zstar,Higgs.Pt(),theta2,mmjj.Pz(),std::max(std::abs(QJet0_eta), std::abs(QJet1_eta))})") #,inputs=["Higgs_pt","Higgs_m","Mqq","Rpt","DeltaRelQQ"])
 flow.Define("BDTAtan","atanh((SBClassifier+1.)/2.)")
-flow.Define("BDTAtanZ","atanh((SBClassifierZ+1.)/2.)")
+flow.Define("BDTAtanNoMass","atanh((SBClassifierNoMass+1.)/2.)")
 
 
