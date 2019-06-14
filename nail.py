@@ -7,34 +7,13 @@ from clang.cindex import CursorKind
 from clang.cindex import Index
 from clang.cindex import TypeKind
 headerstring = '''
-#include <Math/VectorUtil.h>
-#include <ROOT/RVec.hxx>
-#include "Math/Vector4D.h"
-#include <ROOT/RDataFrame.hxx>
+#include "nail.h"
+#include "mva.h"
 #include "helpers.h"
-#define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
-#define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>,ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>> 
-//ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
-#include <vector>
-#include <utility>
-#ifndef NAILSTUFF
-#define NAILSTUFF
-using RNode = ROOT::RDF::RNode;
-struct Result {
- Result(RNode  rdf_): rdf(rdf_){}
- RNode rdf;
- ROOT::RDF::RResultPtr<TH1D> histo;
- std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;
-};
-template <typename T>
-class NodeCaster {
-   public:
-    static ROOT::RDF::RNode Cast(T rdf)
-    {
-              return ROOT::RDF::RNode(rdf);
-    }
-};
-#endif
+MVAWrapper mva;
+TFile* f_param= TFile::Open("muonresolution.root");
+TH2F* hmuon= (TH2F*)f_param->Get("PtErrParametrization");
+
 '''
 
 
@@ -102,7 +81,9 @@ class SampleProcessing:
 
     def init(self, name, cols, dftypes):
         ROOT.gInterpreter.Declare(headerstring)
-        self.name = name
+        ROOT.gInterpreter.Declare('\n#include "mva.h"\n')
+    
+	self.name = name
         self.lazyParse = True
         self.cols = {}
         self.obs = {}
@@ -160,7 +141,8 @@ class SampleProcessing:
 	self.dftypes[name]=ctype
 
     def AddCppCode(self, code) :
-	headerstring+=code
+	global headerstring
+        headerstring+=code #FIXME!!
 	ROOT.gInterpreter.Declare(code) 
 
     def Inputs(self, colName):
@@ -388,6 +370,7 @@ class SampleProcessing:
 #	   if s!="": #FIXME: seems a bug to me
 #	       self.addInput(s,name)
 
+    #FIXME: differentiate sys name with sys replacement
     def VariationWeight(self, name, replacing="", filt=lambda sname, hname, wname: "__syst__" not in hname and "__syst__" not in sname):
         self.variationWeights[name] = {}
         self.variationWeights[name]["replacing"] = replacing
@@ -404,12 +387,16 @@ class SampleProcessing:
 
 
     def CreateProcessor(self,name,outnodes,selections,snap,snapsel,nthreads=0):
-	self.printRDFCpp(outnodes,debug=False,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
+	self.printRDFCpp(outnodes,debug=False,outname=name,selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
         import filecmp
-        if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C",name+"_autogen.C") :
-		os.system("cp tmp.C %s_autogen.C"%name)
-	        os.system("rm %s_autogen.so"%name)
-        	os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
+	outname=name
+	if True:
+#        if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C",name+"_autogen.C") :
+		os.system("cd autogen/%s && make -j 20"%(outname))
+#	        os.system("make")
+	        os.system("cp autogen/%s/libtarget.so %s_autogen.so"%(name,name))
+	        os.system("cd -")
+#       	os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
 	ROOT.gInterpreter.Declare('''
 	Result %s_nail(RNode rdf, int nThreads);
 	'''%name)
@@ -509,6 +496,7 @@ class SampleProcessing:
     def printRDFCpp(self, to, debug=False, outname="out.C", selections={}, snap=[], snapsel="",lib=False,libname=""):
         histos = [x for y in selections for x in selections[y]]
         to = list(set(to+histos+[x for x in selections.keys() if x!=""]))
+	#FIXME: this seem not to do the right thing on multiple filter dependencis when it comes to compute weights
         sels = {self.selSetName(self.Requirements(x)): self.sortedUniqueColumns(
             self.Requirements(x)) for x in to}
 #	print "Update with",{x:self.sortedUniqueColumns(self.Requirements(x)+[x]) for x in selections}
@@ -516,12 +504,20 @@ class SampleProcessing:
 
 # AR###	selections.append("")
 
-#	print "Sels are",sels
+	print "Sels are",sels
         weights = self.defineWeights(sels)
 #	print "Weights to print", weights
-        f = open(outname, "w")
-        ftxt = open(outname[:-2]+"-data.txt", "w")
-        f.write(headerstring+self.additionalcpp)
+	os.system("mkdir -p autogen/"+outname+"/")
+        fmain = open("autogen/"+outname+"/mainlib.C", "w")
+	fmain.write('#include "mva.h"\n')
+        ftxt = open("autogen/"+outname+"/data.txt", "w")
+        fhmain = open("autogen/"+outname+"/mainlib.h", "w")
+        fhmain.write('#include "nail.h"\n')
+        fmain.write(headerstring+self.additionalcpp)
+	hfiles={}
+	cfiles={}
+	f=fmain
+	fh=fhmain
         toprint = set(selections.keys() +
                       [x for t in to+weights for x in self.allNodesTo([t])])
 #	print "toprint:",toprint
@@ -529,6 +525,22 @@ class SampleProcessing:
         for c in cols:
             if c in toprint:
                 #	    print '.... doing..',c
+		
+	#	if "_" in c :
+	#	  base=c[:c.find("_")]
+	#	  print "base is ", base
+	#	  if base not in hfiles :
+	#	      hfiles[base] = open("autogen/%s/%s.h"%(outname,base), "w")
+	#	      hfiles[base].write('#include "nail.h"\n')
+	#	      fmain.write('\n#include "%s"\n'%("autogen/%s/%s.h"%(outname,base)))
+	#	      cfiles[base] = open("autogen/%s/%s.C"%(outname,base), "w")
+	#	      cfiles[base].write('\n#include "%s"\n'%("autogen/%s/%s.h"%(outname,base)))
+#
+#		  f=cfiles[base]
+#		  fh=hfiles[base]
+#		else :
+#		    f=fmain
+#		    fh=fhmain		
                 if c in self.obs or c in self.selections:
                     if self.code[c] != "":
                         inputs = "unsigned int __slot "
@@ -548,11 +560,26 @@ class SampleProcessing:
                             debugcode = 'std::cout << "%s" << std::endl;\n' % c
                         cppcode = "auto func__%s(%s) { %s return %s; }\n" % (
                             c, inputs, debugcode, self.code[c])
-                        f.write(cppcode)
                         self.dftypes[c] = returnType(
-                            cppcode, "func__%s" % c)  # "type__%s"%(c)
+                            cppcode, "func__%s" % c)
+                        cppcode = "%s func__%s(%s) { %s return %s; }\n" % (self.dftypes[c],
+                            c, inputs, debugcode, self.code[c])
+                        f.write(cppcode)
+                        hcode = "%s func__%s(%s);\n" % (self.dftypes[c],
+                            c, inputs)
+                        fh.write(hcode)
+	
+			  # "type__%s"%(c)
                         #f.write("using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;\n"%(c,c))
                         # self.dftypes[c]="type__%s"%(c)
+
+#	for base in cfiles:
+#		      cfiles[base].write('\nRNode addNodes_%s(RNode rdf) { \n return rdf'%base)
+	f=fmain
+	fh=fhmain
+	N=len([x for x in toprint if x in cols])/50 +1
+	for n in range(N) :
+	    f.write('RNode define%s(RNode rdf);\n'%n)
 
         if lib :
 	   f.write('''
@@ -579,32 +606,59 @@ int main(int argc, char** argv)
 
 ''' % self.defFN)
           f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
-        rdf = "rdf"
+        rdf = ""
         if debug:
             rdf = "rdf.Range(1000)"
         i = 0
-        f.write("auto rdf0 =")
+	ii=0
+	   
+        fd= open("autogen/%s/define%s.C"%(outname,i), "w")
+	fd.write('#include "nail.h"\n')
+        fd.write('#include "mainlib.h"\n')
+        fd.write('RNode define%s(RNode rdf){ return rdf\n'%0)
+        f.write("auto rdf0 = define0(rdf);")
         for c in cols:
             if c in toprint:
+#        	if "_" in c :
+ #                  base=c[:c.find("_")]
+  #                 f=cfiles[base]
+   #                fh=hfiles[base]
+    #            else :
+     #              f=fmain
+      #             fh=fhmain
+
                 if c in self.obs or c in self.selections:
                     if self.code[c] != "":
-                        f.write('%s.DefineSlot("%s",func__%s,{%s})\n' % (
+                        fd.write('%s.DefineSlot("%s",func__%s,{%s})\n' % (
                             rdf, c, c, ",".join(['"%s"' % x for x in self.Inputs(c)])))
                     else:
-                        f.write('%s.DefineSlot("%s",func__%s,{%s})\n' % (
+                        fd.write('%s.DefineSlot("%s",func__%s,{%s})\n' % (
                             rdf, c, self.originals[c], ",".join(['"%s"' % x for x in self.Inputs(c)])))
                     rdf = "rdf%s" % i
                     i += 1
+	            if i%50 == 0:
+		      fd.write(';}\n')	
+	              fd= open("autogen/%s/define%s.C"%(outname,i/50), "w")
+		      fd.write('#include "nail.h"\n')
+		      fd.write('#include "mainlib.h"\n')
+                      fd.write('RNode define%d(RNode rdf){ return rdf\n'%(i/50))
+                      f.write("auto rdf%d = define%d(rdf%d);"%(i/50,i/50,i/50-1))
+	
 #		if debug :
 #		   f.write('std::cout << "%s" << std::endl;\n'%rdf);
 #		f.write("auto rdf%s ="%i)
                     rdf = ""
-        f.write(rdf+";\n")
-        rdf = "rdf0"
+#       f.write(rdf+";\n")
+        fd.write(';}\n')  
+
+	f=fmain
+	fh=fhmain
+
+        rdf = "rdf%d"%(i/50)
         f.write("auto toplevel=%s;\n" % rdf)
         f.write("std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;\n")
-        # rdflast=rdf
-        rdflast = "rdf0"
+        rdflast=rdf
+#        rdflast = "rdf0"
         selsprinted = []
         selname = ""
         f.write("{")
@@ -652,6 +706,9 @@ int main(int argc, char** argv)
 		for (r,b) in self.binningRules :
 		    if re.match(r,t) :
 			binning = b
+	        ii+=1
+	        if ii%10==0 :
+		  f.write("}{")
                 f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
                     rdf, t, s, t, s, binning, t, selname))
                 #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))

@@ -1,12 +1,12 @@
 #ifndef HELPERS_H
 #define HELPERS_H
+
 #include <TFile.h>
 #include <Math/VectorUtil.h>
 #include <ROOT/RVec.hxx>
 #include "Math/Vector4D.h"
 #include <ROOT/RDataFrame.hxx>
 #include <TH1F.h>
-#include "mva.h"
 
 template <typename type>
 auto Argmax(const type & v){
@@ -83,22 +83,22 @@ auto matrix_map(shape, int axis,func f, const Vec & v,  const OtherVecs &... arg
 
 }*/
 
-auto pt(const ROOT::Math::PtEtaPhiMVector &i){
+inline auto pt(const ROOT::Math::PtEtaPhiMVector &i){
  return i.pt();
 }
 
-auto mass(const ROOT::Math::PtEtaPhiMVector &i){
+inline auto mass(const ROOT::Math::PtEtaPhiMVector &i){
  return i.M();
 }
 
-float btagWeight(float csv,float pt,float eta){
+inline float btagWeight(float csv,float pt,float eta){
  return 1.0;
 }
-float btagWeightUp(float csv,float pt,float eta){
+inline float btagWeightUp(float csv,float pt,float eta){
  return 1.0;
 }
 
-float efficiency(float pt,float eta,int pid){
+inline float efficiency(float pt,float eta,int pid){
  if(pid==11) return 0.99;
  if(pid==13) return 0.92;
 }
@@ -150,13 +150,13 @@ ROOT::VecOps::RVec<ROOT::VecOps::RVec<size_type>> Combinations(size_type size1, 
  }
 
 
-ROOT::VecOps::RVec<size_t> Range(size_t n){
+inline ROOT::VecOps::RVec<size_t> Range(size_t n){
   ROOT::VecOps::RVec<size_t>  res;
   for(size_t i=0;i<n;i++) res.push_back(i);
   return res;
 }
 
-void loadHistograms(const ROOT::RDF::RNode &rdf, const std::string & name, std::vector<ROOT::RDF::RResultPtr<TH1D>>  & histos ){
+inline void loadHistograms(const ROOT::RDF::RNode &rdf, const std::string & name, std::vector<ROOT::RDF::RResultPtr<TH1D>>  & histos ){
 
 }
 #endif

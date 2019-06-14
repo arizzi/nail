@@ -2,8 +2,9 @@ import ROOT
 #from samples2016 import samples
 from samples2018 import samples #as samples2
 #samples.update(samples2)
-from models2018H import *
-year=2017             
+from models2018Z import *
+from labelDict import *  
+year=2018             
 lumi = "%2.1f fb^{-1}" 
 from math import *
 ROOT.gROOT.ProcessLine(".x setTDRStyle.C")
@@ -13,7 +14,6 @@ totev={}
 totevCount={}
 totevSkim={}
 hnForSys={}
-
 def makeText (x, y, someText, font) :
     tex = ROOT.TLatex(x,y,someText);
     tex.SetNDC();
@@ -22,6 +22,8 @@ def makeText (x, y, someText, font) :
     tex.SetTextSize(0.045);
     tex.SetLineWidth(2);
     return tex
+
+
     
 def setHistoStyle (h, gr) :
     h.SetFillColor(fillcolor[gr])
@@ -35,13 +37,15 @@ def makeRatioMCplot(h) :
     hMC = h.Clone()
     hMC.SetLineWidth(1)
     for n in range(hMC.GetNbinsX()) :
-        hMC.SetBinError(n,  hMC.GetBinError(n)/hMC.GetBinContent(n) if hMC.GetBinContent(n)>0 else 0 )
+       # hMC.SetBinError(n,  hMC.GetBinError(n)/hMC.GetBinContent(n) if hMC.GetBinContent(n)>0 else 0 )
+        e = hMC.GetBinError(n)/hMC.GetBinContent(n) if hMC.GetBinContent(n)>0 else 0     
+        hMC.SetBinError(n,  e if e<0.5 else 0.5 )                                        
         hMC.SetBinContent(n, 0.)
     return hMC
     
 def setStyle(h, isRatio=False) :
     h.SetTitle("")
-    w = 0.055 * (2.5 if isRatio else 1.)
+    w = 0.055 * (2. if isRatio else 1.)
     h.GetYaxis().SetLabelSize(w)
     h.GetXaxis().SetLabelSize(w)
     h.GetYaxis().SetTitleSize(w)
@@ -49,51 +53,9 @@ def setStyle(h, isRatio=False) :
     if isRatio : 
         h.GetYaxis().SetTitle("Data/MC - 1")
         h.GetYaxis().SetTitleOffset(0.5)
-        h.GetXaxis().SetTitle(str(h.GetName()).split("___")[0])
-    else :
-        binWidht = str(h.GetBinWidth(1))[:4]
-        if binWidht.endswith(".") : binWidht = binWidht[:3]
-        h.GetXaxis().SetLabelSize(0)
-        h.GetYaxis().SetTitle("Entries/"+binWidht)
-        h.GetXaxis().SetLabelSize(0)
-        h.GetXaxis().SetTitleSize(0)
-
-def makeText (x, y, someText, font) :
-    tex = ROOT.TLatex(x,y,someText);
-    tex.SetNDC();
-    tex.SetTextAlign(35);
-    tex.SetTextFont(font);
-    tex.SetTextSize(0.045);
-    tex.SetLineWidth(2);
-    return tex
-    
-def setHistoStyle (h, gr) :
-    h.SetFillColor(fillcolor[gr])
-    h.SetTitle("")
-    h.SetLineColor(linecolor[gr])
-    h.SetFillStyle(1001) #NEW
-    h.SetLineStyle(1) #NEW    
-    
-    
-def makeRatioMCplot(h) :
-    hMC = h.Clone()
-    hMC.SetLineWidth(1)
-    for n in range(hMC.GetNbinsX()) :
-        hMC.SetBinError(n,  hMC.GetBinError(n)/hMC.GetBinContent(n) if hMC.GetBinContent(n)>0 else 0 )
-        hMC.SetBinContent(n, 0.)
-    return hMC
-    
-def setStyle(h, isRatio=False) :
-    h.SetTitle("")
-    w = 0.055 * (2.5 if isRatio else 1.)
-    h.GetYaxis().SetLabelSize(w)
-    h.GetXaxis().SetLabelSize(w)
-    h.GetYaxis().SetTitleSize(w)
-    h.GetXaxis().SetTitleSize(w)
-    if isRatio : 
-        h.GetYaxis().SetTitle("Data/MC - 1")
-        h.GetYaxis().SetTitleOffset(0.5)
-        h.GetXaxis().SetTitle(str(h.GetName()).split("___")[0])
+#        h.GetXaxis().SetTitle(str(h.GetName()).split("___")[0])
+	xKey = str(h.GetName()).split("___")[0]                                              
+	h.GetXaxis().SetTitle(labelVariable[xKey] if xKey in labelVariable.keys() else xKey) 
     else :
         binWidht = str(h.GetBinWidth(1))[:4]
         if binWidht.endswith(".") : binWidht = binWidht[:3]
@@ -180,7 +142,7 @@ ROOT.gStyle.SetOptStat(0)
 
 
 def makeplot(hn):
- myLegend= ROOT.TLegend(0.8, 0.4, 1, 0.9, "")       
+ myLegend= ROOT.TLegend(0.85, 0.4, 1, 0.9, "") 
  myLegend.SetFillColor(0);                          
  myLegend.SetBorderSize(0);                         
  myLegend.SetTextFont(42);                          
@@ -195,7 +157,8 @@ def makeplot(hn):
    canvas[hn].SetRightMargin(.05);                        
    canvas[hn].Divide(1,2)                                 
    canvas[hn].GetPad(2).SetPad(0.0,0.,0.85,0.3)           
-   canvas[hn].GetPad(1).SetPad(0.0,0.25,0.85,1.01)        
+   canvas[hn].GetPad(1).SetPad(0.0,0.25,0.85,1.) 
+
    ROOT.gStyle.SetPadLeftMargin(0.15)                     
    canvas[hn].GetPad(2).SetBottomMargin(0.3)              
    canvas[hn].GetPad(2).SetTopMargin(0.05)                
@@ -356,10 +319,10 @@ def makeplot(hn):
    for gr in signal:                                                     
      for b in signal[gr]: histosSignal[hn][b].Draw("hist same")          
                                                                          
-   t0 = makeText(0.65,0.80,hn.split("___")[1], 61)                       
-   t1 = makeText(0.15,0.91,"CMS", 61)                                    
-   t2 = makeText(0.30,0.91,str(year), 42)                                
-   t3 = makeText(0.88,0.91,lumi%(lumitot/1000.)+" (13 TeV)", 42)                         
+   t0 = makeText(0.75,0.80,labelRegion[hn.split("___")[1]] if hn.split("___")[1] in labelRegion.keys() else hn.split("___")[1], 61)  
+   t1 = makeText(0.15,0.95,"CMS", 61)                                                           
+   t2 = makeText(0.30,0.95,str(year), 42)                                                       
+   t3 = makeText(0.92,0.95,lumi%(lumitot/1000.)+" (13 TeV)", 42)                                
    t0.Draw()                                                             
    t1.Draw()                                                             
    t2.Draw()                                                             
@@ -375,8 +338,8 @@ def makeplot(hn):
    canvas[hn].cd(2)
    setStyle(ratio, isRatio=True)
 
-   ratio.SetLabelSize(datastack[hn].GetHistogram().GetLabelSize()*3)
-   ratio.GetYaxis().SetLabelSize(datastack[hn].GetHistogram().GetLabelSize()*3)
+#   ratio.SetLabelSize(datastack[hn].GetHistogram().GetLabelSize()*3)
+#   ratio.GetYaxis().SetLabelSize(datastack[hn].GetHistogram().GetLabelSize()*3)
    ratio.Draw()
    ratioError = makeRatioMCplot(histoTH[hn])  
    ratioError.Draw("same E2")                 
@@ -398,10 +361,10 @@ def makeplot(hn):
 #  for s in systematics:
 #  getsum up , down
    canvas[hn].GetPad(2).SetGridy()
-   canvas[hn].SaveAs("figure/%s.png"%hn)	   
+   canvas[hn].SaveAs("figure/2018/Z/%s.png"%hn)	   
    #canvas[hn].SaveAs("%s.root"%hn)	   
    canvas[hn].GetPad(1).SetLogy(True)
-   canvas[hn].SaveAs("figure/%s_log.png"%hn)	   
+   canvas[hn].SaveAs("figure/2018/Z/%s_log.png"%hn)	   
 
 
 his=[x for x in histoNames if "__syst__" not in x]
