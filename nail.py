@@ -160,6 +160,7 @@ class SampleProcessing:
 	self.dftypes[name]=ctype
 
     def AddCppCode(self, code) :
+	global headerstring #FIXME
 	headerstring+=code
 	ROOT.gInterpreter.Declare(code) 
 
@@ -419,6 +420,19 @@ class SampleProcessing:
 	ROOT.gSystem.Load(name+"_autogen.so")
         CastToRNode= lambda node: ROOT.NodeCaster(node.__cppname__).Cast(node)
 	return (lambda rdf: getattr(ROOT,name+"_nail")(CastToRNode(rdf),nthreads) )
+
+    def Describe(self,name):
+	desc="## Description of variables: %s\n"%name
+	oi=[]
+	nodes=self.allNodesTo(name)
+        for node in [x for x in self.validCols if x in nodes] : #keep meaningful sorting
+	   if node in self.code :
+		 desc+="##########\n%s := %s\n"%(node,self.code[node])
+	   else :
+	     oi.append(node)
+	desc+="\n\n#Used inputs: %s"%set(oi)
+	return desc  
+
 
 
     def recursiveGetWeights(self, sel):
