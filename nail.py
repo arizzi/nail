@@ -8,6 +8,7 @@ import copy
 from clang.cindex import CursorKind
 from clang.cindex import Index
 from clang.cindex import TypeKind
+nstatements=40
 headerstringBase = '''
 #include <Math/VectorUtil.h>
 #include <ROOT/RVec.hxx>
@@ -574,6 +575,17 @@ class SampleProcessing:
         for s, r in self.regexps:
             code = re.sub(s, r, code)
         return code
+	
+    def newChunk(self,n,f,fh,isDefine=False):
+	fc = open("autogen/chunk%s%s.C"%("def" if isDefine else "",n),"w")
+        fc.write('#include "main.h"\n')
+	if isDefine:
+	  fh.write('RNode define%s(RNode rdf);\n'%n)
+	  fc.write('RNode define%s(RNode rdf){ return rdf\n'%n)
+          f.write("auto rdf%d = define%d(rdf%s);\n"%(n,n,("%d"%(n-1)) if n-1>=0 else "" ))
+	return fc
+ 
+
 
    
     def cppFunction(self,node,debug=False):
@@ -637,7 +649,7 @@ class SampleProcessing:
 #	print "Sels are",sels
         weights = self.defineWeights(sels)
 #	print "Weights to print", weights
-        f = open(outname, "w")
+        f = open("autogen/main.C", "w")
         fh = open("autogen/main.h", "w")
         ftxt = open(outname[:-2]+"-data.txt", "w")
         fh.write(self.headerstring)
@@ -647,6 +659,7 @@ class SampleProcessing:
                       [x for t in to+weights for x in self.allNodesTo([t])])
 	toprint = [x for x in toprint if x not in nottoprint] 
 #	print "toprint:",toprint
+	sm=0
         cols = self.validCols  # if not optimizeFilters else orderedColumns
         for c in cols:
             if c in toprint:
@@ -654,7 +667,12 @@ class SampleProcessing:
                 if c in self.obs or c in self.selections:
 	            cppcode,hcode = self.cppFunction(c,debug)
 		    if cppcode is not None :
-                        f.write(cppcode)
+                        if sm % nstatements==0 :
+                            fc=self.newChunk(sm/nstatements,f,fh)
+                        fc.write(cppcode)
+                        fh.write(hcode)
+                        sm+=1
+
 
         if lib :
 	   f.write('''
@@ -682,16 +700,25 @@ int main(int argc, char** argv)
 
 ''' % self.defFN)
           f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
-        rdf = "rdf"
-#        if debug:
-#            rdf = "rdf.Range(1000)"
+        rdf = ""
+        if debug:
+            rdf = "rdf.Range(1000)"
         i = 0
-        f.write("auto rdf0 =")
+      #  fc=self.newChunk(i/nstatements,f,fh,True)
+	lastrdf=""
+#f.write("auto rdf0 =")
         for c in cols:
             if c in toprint:
                 if c in self.obs or c in self.selections:
-                    f.write('%s.DefineSlot("%s",%s,{%s})\n' % (
+	            if i % nstatements==0 :
+		       if i > 0 :
+			       fc.write(";}\n")
+                       fc=self.newChunk(i/nstatements,f,fh,True)
+        	       rdflast = "rdf%d"%(i/nstatements)
+
+                    fc.write('%s.DefineSlot("%s",%s,{%s})\n' % (
                             rdf, c, self.funcName(c) , ",".join(['"%s"' % x for x in self.Inputs(c)])))
+
 
                     rdf = "rdf%s" % i
                     i += 1
@@ -699,12 +726,11 @@ int main(int argc, char** argv)
 #		   f.write('std::cout << "%s" << std::endl;\n'%rdf);
 #		f.write("auto rdf%s ="%i)
                     rdf = ""
-        f.write(rdf+";\n")
-        rdf = "rdf0"
-        f.write("auto toplevel=%s;\n" % rdf)
+        fc.write(rdf+";}\n")
+        rdf = rdflast
+	f.write("auto toplevel=%s;\n" % rdf)
         f.write("std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;\n")
         # rdflast=rdf
-        rdflast = "rdf0"
         selsprinted = []
         selname = ""
         f.write("{")
@@ -752,11 +778,11 @@ int main(int argc, char** argv)
 		for (r,b) in self.binningRules :
 		    if re.match(r,t) :
 			binning = b
-		hname="%s___%s"%(t, s)
-		if hname not in nottoprint :
-                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
-                    rdf, t, s, t, s, binning, t, selname))
-	  	  printedhistos.append(hname)
+##		hname="%s___%s"%(t, s)
+##		if hname not in nottoprint :
+##                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
+##                    rdf, t, s, t, s, binning, t, selname))
+##	  	  printedhistos.append(hname)
                 #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                 for w in self.variationWeights:
                     if self.variationWeights[w]["filter"](selname, t, w):
@@ -765,9 +791,9 @@ int main(int argc, char** argv)
                         ww = "%sWeight__%s" % (selname, w)
                         ftxt.write('%s,%s__syst__%s,%s,1000,0,100,%s,%s\n' % (
                             rdf, t, w, t, t, ww))
-                        f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
-                            rdf, t, s, w, t, s, binning,  t, ww))
-			printedhistos.append(hname)
+##                        f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
+##                            rdf, t, s, w, t, s, binning,  t, ww))
+##			printedhistos.append(hname)
 
         if snapsel == "":
             rdf = rdflast
