@@ -160,6 +160,9 @@ class SampleProcessing:
 	self.dftypes[name]=ctype
 
     def AddCppCode(self, code) :
+	self.additionalcpp+=code
+
+    def AddHeaderCode(self, code) :
 	global headerstring #FIXME
 	headerstring+=code
 	ROOT.gInterpreter.Declare(code) 
@@ -535,8 +538,11 @@ class SampleProcessing:
         weights = self.defineWeights(sels)
 #	print "Weights to print", weights
         f = open(outname, "w")
+        fh = open("autogen/main.h", "w")
         ftxt = open(outname[:-2]+"-data.txt", "w")
-        f.write(headerstring+self.additionalcpp)
+        fh.write(headerstring)
+        f.write('#include "main.h"\n')
+	f.write(self.additionalcpp)
         toprint = set(selections.keys() +
                       [x for t in to+weights for x in self.allNodesTo([t])])
 #	print "toprint:",toprint
