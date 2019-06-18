@@ -424,7 +424,7 @@ class SampleProcessing:
     def Describe(self,name):
 	desc="## Description of variables: %s\n"%name
 	oi=[]
-	nodes=self.allNodesTo(name)
+	nodes=list(self.allNodesTo(name))+name
         for node in [x for x in self.validCols if x in nodes] : #keep meaningful sorting
 	   if node in self.code :
 		 desc+="##########\n%s := %s\n"%(node,self.code[node])
@@ -460,6 +460,7 @@ class SampleProcessing:
             return list(weights)+[variation]
         res = []
         for w in weights:
+	      
             if w == v["replacing"] and v["filter"](selname, variation, hist):
                 res.append(variation)
             else:

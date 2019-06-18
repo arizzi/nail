@@ -159,4 +159,9 @@ ROOT::VecOps::RVec<size_t> Range(size_t n){
 void loadHistograms(const ROOT::RDF::RNode &rdf, const std::string & name, std::vector<ROOT::RDF::RResultPtr<TH1D>>  & histos ){
 
 }
+template <typename T>
+T SumDef(const ROOT::VecOps::RVec<T> &v)
+{
+   return std::accumulate(v.begin(), v.end(), T());
+}
 #endif
