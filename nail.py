@@ -10,11 +10,14 @@ from clang.cindex import Index
 from clang.cindex import TypeKind
 nstatements=40
 headerstringBase = '''
+#include "nail.h"
+#include "helpers.h"
+'''
+oldh='''
 #include <Math/VectorUtil.h>
 #include <ROOT/RVec.hxx>
 #include "Math/Vector4D.h"
 #include <ROOT/RDataFrame.hxx>
-#include "helpers.h"
 #define MemberMap(vector,member) Map(vector,[](auto x){return x.member;})
 #define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>,ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>> 
 //ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
@@ -448,19 +451,22 @@ class SampleProcessing:
 	self.externalCreated=True
 	#TODO: check contente
 
-    def CreateProcessor(self,name,outnodes,selections,snap,snapsel,nthreads=0,nottoprint=[],debug=False):
-	printed=self.printRDFCpp(outnodes,debug=debug,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name,nottoprint=nottoprint)
-        import filecmp
+    def CreateProcessor(self,name,outnodes,selections,snap,snapsel,nthreads=0):
 	self.checkExternals()
-        if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C",name+"_autogen.C") :
-		os.system("cp tmp.C %s_autogen.C"%name)
-	        os.system("rm %s_autogen.so"%name)
-        	#os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
-	        #os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -L.  -lotherStuff -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
-		flags=" "
-                for p in self.ipaths: flags+=" -I%s"%p
-	        print "Compiling with: g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L. -I.  -lNailExternals "%(name,name)+flags
-	        os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L.  -lNailExternals"%(name,name)+flags)
+	#self.printRDFCpp(outnodes,debug=False,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
+        #import filecmp
+        self.printRDFCpp(outnodes,debug=False,outname=name,selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
+        #import filecmp
+        outname=name
+        if True:
+#        if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C",name+"_autogen.C") :
+                os.system("cp autogen/Makefile autogen/"+outname)
+                os.system("cd autogen/%s && make -j 60"%(outname))
+#               os.system("make")
+                os.system("cp autogen/%s/libtarget.so %s_autogen.so"%(name,name))
+#               os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
+  
+
 	ROOT.gInterpreter.Declare('''
 	Result %s_nail(RNode rdf, int nThreads);
 	'''%name)
@@ -576,8 +582,8 @@ class SampleProcessing:
             code = re.sub(s, r, code)
         return code
 	
-    def newChunk(self,n,f,fh,isDefine=False):
-	fc = open("autogen/chunk%s%s.C"%("def" if isDefine else "",n),"w")
+    def newChunk(self,n,f,fh,outname,isDefine=False):
+	fc = open("autogen/"+outname+"/chunk%s%s.C"%("def" if isDefine else "",n),"w")
         fc.write('#include "main.h"\n')
 	if isDefine:
 	  fh.write('RNode define%s(RNode rdf);\n'%n)
@@ -649,9 +655,11 @@ class SampleProcessing:
 #	print "Sels are",sels
         weights = self.defineWeights(sels)
 #	print "Weights to print", weights
-        f = open("autogen/main.C", "w")
-        fh = open("autogen/main.h", "w")
-        ftxt = open(outname[:-2]+"-data.txt", "w")
+        os.system("rm -rf autogen/"+outname+"/")
+        os.system("mkdir -p autogen/"+outname+"/")
+        f = open("autogen/"+outname+"/main.C", "w")
+        fh = open("autogen/"+outname+"/main.h", "w")
+        ftxt = open(outname+"-data.txt", "w")
         fh.write(self.headerstring)
         f.write('#include "main.h"\n')
 	f.write(self.additionalcpp)
@@ -668,7 +676,7 @@ class SampleProcessing:
 	            cppcode,hcode = self.cppFunction(c,debug)
 		    if cppcode is not None :
                         if sm % nstatements==0 :
-                            fc=self.newChunk(sm/nstatements,f,fh)
+                            fc=self.newChunk(sm/nstatements,f,fh,outname)
                         fc.write(cppcode)
                         fh.write(hcode)
                         sm+=1
@@ -704,7 +712,6 @@ int main(int argc, char** argv)
         if debug:
             rdf = "rdf.Range(1000)"
         i = 0
-      #  fc=self.newChunk(i/nstatements,f,fh,True)
 	lastrdf=""
 #f.write("auto rdf0 =")
         for c in cols:
@@ -713,7 +720,7 @@ int main(int argc, char** argv)
 	            if i % nstatements==0 :
 		       if i > 0 :
 			       fc.write(";}\n")
-                       fc=self.newChunk(i/nstatements,f,fh,True)
+                       fc=self.newChunk(i/nstatements,f,fh,outname,True)
         	       rdflast = "rdf%d"%(i/nstatements)
 
                     fc.write('%s.DefineSlot("%s",%s,{%s})\n' % (
@@ -729,11 +736,11 @@ int main(int argc, char** argv)
         fc.write(rdf+";}\n")
         rdf = rdflast
 	f.write("auto toplevel=%s;\n" % rdf)
-        f.write("std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;\n")
+        f.write("std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;\nResult r(%s);\n"%rdf)
         # rdflast=rdf
         selsprinted = []
         selname = ""
-        f.write("{")
+#        f.write("{")
         for s in selections.keys():
             for t in selections[s]:
                 #        for t in to :
@@ -758,16 +765,19 @@ int main(int argc, char** argv)
                     #                    print 'auto %s_neededselection=%s.Filter("%s");'%(t,rdf,'").Filter("'.join(self.requirements[t]))
                     if selname not in selsprinted:
                         #			print "Printing",selname
-                        f.write("}")
-                        f.write('auto selection_%s=%s.Filter("%s","%s")' %
+#                        f.write("}")
+                        f.write('RNode selection_%s=%s.Filter("%s","%s")' %
                                 (selname, rdflast, sellist[0], sellist[0]))
                         for ss in sellist[1:]:
                             f.write('.Filter("%s","%s")' % (ss, ss))
                         f.write(";\n")
                         selsprinted.append(selname)
-                        f.write("{")
+#                        f.write("{")
                         f.write('loadHistograms(%s,"%s",histos);\n' % (
                             "selection_%s" % selname, "selection_%s" % selname))
+			#f.write('r.selections["%s"]=selection_%s;\n'%(selname,selname))
+			f.write('r.selectionNames.push_back("%s");\n'%(selname))
+			f.write('r.selectionNodes.push_back(selection_%s);\n'%(selname))
                     rdf = "selection_%s" % selname
                 else:
                     rdf = rdflast
@@ -778,11 +788,12 @@ int main(int argc, char** argv)
 		for (r,b) in self.binningRules :
 		    if re.match(r,t) :
 			binning = b
-##		hname="%s___%s"%(t, s)
-##		if hname not in nottoprint :
-##                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
-##                    rdf, t, s, t, s, binning, t, selname))
-##	  	  printedhistos.append(hname)
+
+		hname="%s___%s"%(t, s)
+		if hname not in nottoprint :
+                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
+                    rdf, t, s, t, s, binning, t, selname))
+	  	  printedhistos.append(hname)
                 #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                 for w in self.variationWeights:
                     if self.variationWeights[w]["filter"](selname, t, w):
@@ -791,16 +802,16 @@ int main(int argc, char** argv)
                         ww = "%sWeight__%s" % (selname, w)
                         ftxt.write('%s,%s__syst__%s,%s,1000,0,100,%s,%s\n' % (
                             rdf, t, w, t, t, ww))
-##                        f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
-##                            rdf, t, s, w, t, s, binning,  t, ww))
-##			printedhistos.append(hname)
+                        f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
+                            rdf, t, s, w, t, s, binning,  t, ww))
+			printedhistos.append(hname)
 
         if snapsel == "":
             rdf = rdflast
         else:
             rdf = "selection_%s" % snapsel
 
-        f.write("}\n")
+#        f.write("}\n")
         s = snapsel
         snapGood = []
 #        f.write("auto snaprdf=%s\n"%rdf)
@@ -814,7 +825,7 @@ int main(int argc, char** argv)
             else:
                 snapGood.append(t)
 	if lib :
-          f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdf)
+          f.write(';\n r.rdf=%s; r.histos=histos; return r;}'%rdf)
 #          f.write(';\n return std::pair<RNode,std::vector<int> >(%s,std::vector<int>());}'%rdflast)
 #	  f.write(';\n return %s;}'%rdflast)
 	else : 
