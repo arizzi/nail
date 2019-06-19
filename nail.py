@@ -1,4 +1,5 @@
 import ROOT
+from hashlib import md5
 import clang.cindex
 import re
 import os,sys
@@ -125,6 +126,8 @@ class SampleProcessing:
         self.dftypes = dftypes
 	self.binningRules =[]
 	self.additionalcpp=""
+	self.md5s={}
+	self.generatedCode={}
         print >> sys.stderr, "Start"
 #	print self.inputTypes
         for c, t in cols:
@@ -427,7 +430,7 @@ class SampleProcessing:
 	nodes=list(self.allNodesTo(name))+name
         for node in [x for x in self.validCols if x in nodes] : #keep meaningful sorting
 	   if node in self.code :
-		 desc+="##########\n%s := %s\n"%(node,self.code[node])
+		 desc+="##########\n%s := %s # %s\n"%(node,self.code[node],self.checksum(node))
 	   else :
 	     oi.append(node)
 	desc+="\n\n#Used inputs: %s"%set(oi)
@@ -521,6 +524,54 @@ class SampleProcessing:
             code = re.sub(s, r, code)
         return code
 
+   
+    def cppFunction(self,node,debug=False):
+	if node not in self.generatedCode :
+  	  if self.code[node] == "":
+	    return (None,None)
+	  inputs = "unsigned int __slot "
+          for i in self.Inputs(node):
+             if inputs != "":
+                      inputs += ", "
+             if i in self.dftypes:
+                inputs += "const %s & %s" % (
+                                 self.dftypes[i], i)
+             else:
+                inputs += "const %s & %s" % (
+                   self.dftypes[i[:i.rfind("__syst__")]], i)
+          debugcode = ""
+          if debug:
+            debugcode = 'std::cout << "%s" << std::endl;\n' % c
+	  if node not in self.dftypes :
+            autocppcode = "auto func__%s(%s) { %s return %s; }\n" % (
+                 node, inputs, debugcode, self.code[node])
+            self.dftypes[node] = returnType(autocppcode, "func__%s" % node)
+
+          cppcode = "%s func__%s(%s) { %s return %s; }\n" % (self.dftypes[node],
+                 node, inputs, debugcode, self.code[node])
+          hcode = "%s func__%s(%s);\n" % (self.dftypes[node], node, inputs)
+	  self.generatedCode[node]=(cppcode,hcode)
+	return self.generatedCode[node]
+
+    def funcName(self,node) :
+	return "func__%s"%(node if self.code[node] != "" else  self.originals[node])
+
+
+    def checksum(self,node):
+	if node not in self.md5s:
+	   res=md5("")
+	   for i in  self.Inputs(node):
+	       res.update(self.checksum(i))
+	   if node in self.inputTypes :
+		cpp=node #FIXME use some meta data from file?
+		h=""
+	   else :
+ 	        codeName=node if self.code[node] != "" else  self.originals[node]
+	        cpp,h = self.cppFunction(codeName)
+	   res.update(cpp+h)
+	   self.md5s[node]=res.hexdigest()  
+	return self.md5s[node]
+
     def printRDFCpp(self, to, debug=False, outname="out.C", selections={}, snap=[], snapsel="",lib=False,libname=""):
         histos = [x for y in selections for x in selections[y]]
         to = list(set(to+histos+[x for x in selections.keys() if x!=""]))
@@ -545,29 +596,9 @@ class SampleProcessing:
             if c in toprint:
                 #	    print '.... doing..',c
                 if c in self.obs or c in self.selections:
-                    if self.code[c] != "":
-                        inputs = "unsigned int __slot "
-                        for i in self.Inputs(c):
-                            if inputs != "":
-                                inputs += ", "
-                            if i in self.dftypes:
-                                inputs += "const %s & %s" % (
-                                    self.dftypes[i], i)
-                            else:
-                                #print i, self.dftypes, c
-                                inputs += "const %s & %s" % (
-                                    self.dftypes[i[:i.rfind("__syst__")]], i)
-                        #print "auto func__%s = [](%s) { return %s; };" %(c,inputs,self.code[c])
-                        debugcode = ""
-                        if debug:
-                            debugcode = 'std::cout << "%s" << std::endl;\n' % c
-                        cppcode = "auto func__%s(%s) { %s return %s; }\n" % (
-                            c, inputs, debugcode, self.code[c])
+	            cppcode,hcode = self.cppFunction(c)
+		    if cppcode is not None :
                         f.write(cppcode)
-                        self.dftypes[c] = returnType(
-                            cppcode, "func__%s" % c)  # "type__%s"%(c)
-                        #f.write("using type__%s = ROOT::TypeTraits::CallableTraits<decltype(func__%s)>::ret_type;\n"%(c,c))
-                        # self.dftypes[c]="type__%s"%(c)
 
         if lib :
 	   f.write('''
@@ -602,12 +633,9 @@ int main(int argc, char** argv)
         for c in cols:
             if c in toprint:
                 if c in self.obs or c in self.selections:
-                    if self.code[c] != "":
-                        f.write('%s.DefineSlot("%s",func__%s,{%s})\n' % (
-                            rdf, c, c, ",".join(['"%s"' % x for x in self.Inputs(c)])))
-                    else:
-                        f.write('%s.DefineSlot("%s",func__%s,{%s})\n' % (
-                            rdf, c, self.originals[c], ",".join(['"%s"' % x for x in self.Inputs(c)])))
+                    f.write('%s.DefineSlot("%s",%s,{%s})\n' % (
+                            rdf, c, self.funcName(c) , ",".join(['"%s"' % x for x in self.Inputs(c)])))
+
                     rdf = "rdf%s" % i
                     i += 1
 #		if debug :
