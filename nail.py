@@ -455,7 +455,7 @@ class SampleProcessing:
 	self.checkExternals()
 	#self.printRDFCpp(outnodes,debug=False,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
         #import filecmp
-        self.printRDFCpp(outnodes,debug=False,outname=name,selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
+        self.printRDFCpp(outnodes,debug=True,outname=name,selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
         #import filecmp
         outname=name
         if True:
@@ -587,7 +587,7 @@ class SampleProcessing:
         fc.write('#include "main.h"\n')
 	if isDefine:
 	  fh.write('RNode define%s(RNode rdf);\n'%n)
-	  fc.write('RNode define%s(RNode rdf){ return rdf\n'%n)
+	  fc.write('RNode define%s(RNode rdf){ std::cout << "Here " << %s << std::endl; return rdf\n'%(n,n))
           f.write("auto rdf%d = define%d(rdf%s);\n"%(n,n,("%d"%(n-1)) if n-1>=0 else "" ))
 	return fc
  
@@ -709,8 +709,8 @@ int main(int argc, char** argv)
 ''' % self.defFN)
           f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
         rdf = ""
-        if debug:
-            rdf = "rdf.Range(1000)"
+#        if debug:
+ #           rdf = "rdf.Range(1000)"
         i = 0
 	lastrdf=""
 #f.write("auto rdf0 =")
@@ -825,7 +825,7 @@ int main(int argc, char** argv)
             else:
                 snapGood.append(t)
 	if lib :
-          f.write(';\n r.rdf=%s; r.histos=histos; return r;}'%rdf)
+          f.write(';\n r.histos=histos; return r;}')
 #          f.write(';\n return std::pair<RNode,std::vector<int> >(%s,std::vector<int>());}'%rdflast)
 #	  f.write(';\n return %s;}'%rdflast)
 	else : 
