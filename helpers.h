@@ -75,6 +75,15 @@ auto TakeDef(const type &v, const ROOT::VecOps::RVec<indextype> &m,  typename ty
  }
  return ret;
 }
+template <typename type,typename indextype>
+auto TakeDef(const type &v, const ROOT::VecOps::RVec<indextype> &m,  const type &defs){
+ type ret;
+ for(auto i : m) {
+   if(i>=0 and i < v.size()) ret.push_back(v[i]); else ret.push_back(defs[i]);
+ }
+ return ret;
+}
+
 
 
 

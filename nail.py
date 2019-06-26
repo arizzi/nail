@@ -153,7 +153,7 @@ class SampleProcessing:
 
     def AddExpectedInput(self, name,ctype):
         if name in self.validCols:
-	    print "Attempting to add a known input", name," => noop"
+	    print "Attempting to add a known input", name," => noop"	
 	    return
         self.validCols.append(name) 
         self.inputTypes[name]=ctype
@@ -311,6 +311,9 @@ class SampleProcessing:
                     requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
 
         else:
+	    if code!=self.code[name] :
+		print "DIFFERENT CODE IN REDEFINE", code, "\n-- vs -- \n", self.code[name]
+		exit(1)
             print "Attempt to redefine column", name, " => noop"
 
     def Selection(self, name, code, inputs=[], requires=[], original=""):
@@ -407,22 +410,26 @@ class SampleProcessing:
         self.histos["bin"] = binHint
 
 
-    def CreateProcessor(self,name,outnodes,selections,snap,snapsel,nthreads=0):
-	self.printRDFCpp(outnodes,debug=False,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
+    def CreateProcessor(self,name,outnodes,selections,snap,snapsel,nthreads=0,nottoprint=[],debug=False):
+	printed=self.printRDFCpp(outnodes,debug=debug,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name,nottoprint=nottoprint)
         import filecmp
         if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C",name+"_autogen.C") :
 		os.system("cp tmp.C %s_autogen.C"%name)
 	        os.system("rm %s_autogen.so"%name)
-        	os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
+        	#os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
+	        os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
 	ROOT.gInterpreter.Declare('''
 	Result %s_nail(RNode rdf, int nThreads);
 	'''%name)
         ROOT.gROOT.ProcessLine('''
         ROOT::EnableImplicitMT(%s);
         '''%nthreads)
+	print "Loading ",name+"_autogen.so"
 	ROOT.gSystem.Load(name+"_autogen.so")
         CastToRNode= lambda node: ROOT.NodeCaster(node.__cppname__).Cast(node)
-	return (lambda rdf: getattr(ROOT,name+"_nail")(CastToRNode(rdf),nthreads) )
+	fu=(lambda rdf: getattr(ROOT,name+"_nail")(CastToRNode(rdf),nthreads) )
+	fu.produces=printed
+	return fu
 
     def Describe(self,name):
 	desc="## Description of variables: %s\n"%name
@@ -541,7 +548,7 @@ class SampleProcessing:
                    self.dftypes[i[:i.rfind("__syst__")]], i)
           debugcode = ""
           if debug:
-            debugcode = 'std::cout << "%s" << std::endl;\n' % c
+            debugcode = 'std::cout << "%s" << std::endl;\n' % node
 	  if node not in self.dftypes :
             autocppcode = "auto func__%s(%s) { %s return %s; }\n" % (
                  node, inputs, debugcode, self.code[node])
@@ -572,7 +579,8 @@ class SampleProcessing:
 	   self.md5s[node]=res.hexdigest()  
 	return self.md5s[node]
 
-    def printRDFCpp(self, to, debug=False, outname="out.C", selections={}, snap=[], snapsel="",lib=False,libname=""):
+    def printRDFCpp(self, to=[], debug=False, outname="out.C", selections={}, snap=[], snapsel="",lib=False,libname="",nottoprint=[]):
+	printedhistos=[]
         histos = [x for y in selections for x in selections[y]]
         to = list(set(to+histos+[x for x in selections.keys() if x!=""]))
         sels = {self.selSetName(self.Requirements(x)): self.sortedUniqueColumns(
@@ -590,13 +598,14 @@ class SampleProcessing:
         f.write(headerstring+self.additionalcpp)
         toprint = set(selections.keys() +
                       [x for t in to+weights for x in self.allNodesTo([t])])
+	toprint = [x for x in toprint if x not in nottoprint] 
 #	print "toprint:",toprint
         cols = self.validCols  # if not optimizeFilters else orderedColumns
         for c in cols:
             if c in toprint:
                 #	    print '.... doing..',c
                 if c in self.obs or c in self.selections:
-	            cppcode,hcode = self.cppFunction(c)
+	            cppcode,hcode = self.cppFunction(c,debug)
 		    if cppcode is not None :
                         f.write(cppcode)
 
@@ -626,8 +635,8 @@ int main(int argc, char** argv)
 ''' % self.defFN)
           f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
         rdf = "rdf"
-        if debug:
-            rdf = "rdf.Range(1000)"
+#        if debug:
+#            rdf = "rdf.Range(1000)"
         i = 0
         f.write("auto rdf0 =")
         for c in cols:
@@ -695,16 +704,22 @@ int main(int argc, char** argv)
 		for (r,b) in self.binningRules :
 		    if re.match(r,t) :
 			binning = b
-                f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
+		hname="%s___%s"%(t, s)
+		if hname not in nottoprint :
+                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
                     rdf, t, s, t, s, binning, t, selname))
+	  	  printedhistos.append(hname)
                 #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                 for w in self.variationWeights:
                     if self.variationWeights[w]["filter"](selname, t, w):
+		      hname="%s___%s__syst__%s"%(t, s,w)
+		      if hname not in nottoprint :
                         ww = "%sWeight__%s" % (selname, w)
                         ftxt.write('%s,%s__syst__%s,%s,1000,0,100,%s,%s\n' % (
                             rdf, t, w, t, t, ww))
                         f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
                             rdf, t, s, w, t, s, binning,  t, ww))
+			printedhistos.append(hname)
 
         if snapsel == "":
             rdf = rdflast
@@ -741,7 +756,7 @@ int main(int argc, char** argv)
    return 0;
 }
 ''')
-
+        return toprint+printedhistos       
 #        for t in to :
 #	   if t in self.histos:
 #	  	print '%s->Write();'%(t)
