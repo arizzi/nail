@@ -78,8 +78,10 @@ auto TakeDef(const type &v, const ROOT::VecOps::RVec<indextype> &m,  typename ty
 template <typename type,typename indextype>
 auto TakeDef(const type &v, const ROOT::VecOps::RVec<indextype> &m,  const type &defs){
  type ret;
+ size_t ii=0;
  for(auto i : m) {
-   if(i>=0 and i < v.size()) ret.push_back(v[i]); else ret.push_back(defs[i]);
+   if(i>=0 and i < v.size()) ret.push_back(v[i]); else ret.push_back(defs[ii]);
+   ii++;
  }
  return ret;
 }
