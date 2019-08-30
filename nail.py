@@ -417,10 +417,11 @@ class SampleProcessing:
 		os.system("cp tmp.C %s_autogen.C"%name)
 	        os.system("rm %s_autogen.so"%name)
         	#os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
-	        os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
+	        os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -L.  -lotherStuff -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
 	ROOT.gInterpreter.Declare('''
 	Result %s_nail(RNode rdf, int nThreads);
 	'''%name)
+	print "Setting nthreads",nthreads
         ROOT.gROOT.ProcessLine('''
         ROOT::EnableImplicitMT(%s);
         '''%nthreads)
@@ -842,14 +843,14 @@ int main(int argc, char** argv)
         #print  >> sys.stderr, "VarNodesTo:",nodesTo
         return [x for x in self.allNodesFromWithWhiteList([self.variations[name]["original"]], nodesTo) if x in nodesTo]
 
-    def createVariationBranch(self, name, target):
+    def createVariationBranch(self, name, target,varsuffix="__syst__"):
         #	 print >> sys.stderr, "Find affected"
         affected = (self.findAffectedNodesForVariationOnTargets(name, target))
 #	 print >> sys.stderr, "Found affected\n", affected
         # keep original sorting
         affected.sort(key=lambda x: self.validCols.index(x))
-        res = [y+"__syst__"+name for y in affected if y in target]
-        replacementTable = [(x, x+"__syst__"+name) for x in affected]
+        res = [y+varsuffix+name for y in affected if y in target]
+        replacementTable = [(x, x+varsuffix+name) for x in affected]
         for x, x_syst in replacementTable:
             ncode = ""
             if self.dupcode:
@@ -869,11 +870,11 @@ int main(int argc, char** argv)
                 selections = []
                 for s in self.Requirements(x):
                     if s in affected:
-                        selections.append(s+"__syst__"+name)
+                        selections.append(s+varsuffix+name)
                     else:
                         selections.append(s)
 
-                if x+"__syst__"+name not in self.validCols:
+                if x+varsuffix+name not in self.validCols:
                     if self.dupcode:
                         self.Define(x_syst, ncode, requires=selections)
                     else:
@@ -884,11 +885,11 @@ int main(int argc, char** argv)
                 selections = []
                 for s in self.Requirements(x):
                     if s in affected:
-                        selections.append(s+"__syst__"+name)
+                        selections.append(s+varsuffix+name)
                     else:
                         selections.append(s)
 
-                if x+"__syst__"+name not in self.validCols:
+                if x+varsuffix+name not in self.validCols:
                     if self.dupcode:
                         self.Selection(x_syst, ncode, requires=selections)
                         # FIXME: weights
