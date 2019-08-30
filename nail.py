@@ -908,6 +908,8 @@ int main(int argc, char** argv)
         res = copy.deepcopy(selWithHistos)
         for syst in systematics:
             print "creating systematic", syst
+            weights = self.createVariationBranch(syst, self.defineWeights(selWithHistos))
+            print "created weights", weights
             for sel in selWithHistos:
                 selWsyst = self.createVariationBranch(syst, [sel])
                 histos = self.createVariationBranch(syst, selWithHistos[sel])
