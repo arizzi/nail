@@ -1,4 +1,5 @@
 import ROOT
+from collections import OrderedDict
 from hashlib import md5
 import clang.cindex
 import re
@@ -170,8 +171,8 @@ class SampleProcessing:
     def Inputs(self, colName):
         if colName not in self.inputs:
             #	    print "parse! ", colName
-            self.inputs[colName] = sorted(
-                set(self.findCols(self.code[colName], colName)+self.explicitInputs[colName]))
+            self.inputs[colName] = list(OrderedDict.fromkeys(
+                self.findCols(self.code[colName], colName)+self.explicitInputs[colName]))
         return self.inputs[colName]
 
     def Requirements(self, colName):
@@ -305,8 +306,8 @@ class SampleProcessing:
             self.explicitInputs[name] = inputs
             self.explicitRequirements[name] = requires
             if not self.lazyParse:
-                self.inputs[name] = sorted(
-                    list(set(self.findCols(pcode, name)+inputs)))
+                self.inputs[name] = list(OrderedDict.fromkeys(
+                    self.findCols(pcode, name)+inputs))
                 self.requirements[name] = list(set(
                     requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
 
@@ -314,7 +315,7 @@ class SampleProcessing:
 	    if code!=self.code[name] :
 		print "DIFFERENT CODE IN REDEFINE", code, "\n-- vs -- \n", self.code[name]
 		exit(1)
-            print "Attempt to redefine column", name, " => noop"
+            print "Attempt to redefine column", name, " the code is the same => noop"
 
     def Selection(self, name, code, inputs=[], requires=[], original=""):
         if name not in self.validCols:
@@ -326,8 +327,8 @@ class SampleProcessing:
             self.explicitInputs[name] = inputs
             self.explicitRequirements[name] = requires
             if not self.lazyParse:
-                self.inputs[name] = sorted(
-                    list(set(self.findCols(pcode, name)+inputs)))
+                self.inputs[name] = list(OrderedDict.fromkeys(
+                    self.findCols(pcode, name)+inputs))
                 self.requirements[name] = list(set(
                     requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
 
@@ -422,7 +423,8 @@ class SampleProcessing:
 	Result %s_nail(RNode rdf, int nThreads);
 	'''%name)
 	print "Setting nthreads",nthreads
-        ROOT.gROOT.ProcessLine('''
+	if nthreads > 0 :
+            ROOT.gROOT.ProcessLine('''
         ROOT::EnableImplicitMT(%s);
         '''%nthreads)
 	print "Loading ",name+"_autogen.so"
@@ -613,6 +615,7 @@ class SampleProcessing:
         if lib :
 	   f.write('''
 Result %s_nail(RNode rdf,int nThreads) {
+     if(nThreads > 0)
      ROOT::EnableImplicitMT(nThreads);
 
 	   '''%libname)
