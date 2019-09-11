@@ -129,6 +129,12 @@ class SampleProcessing:
 	self.additionalcpp=""
 	self.md5s={}
 	self.generatedCode={}
+#stuff for external code:
+	self.cppfiles=[]
+	self.lpaths=[]
+	self.ipaths=[]
+	self.libs=[]
+	self.externalCreated=False
         print >> sys.stderr, "Start"
 #	print self.inputTypes
         for c, t in cols:
@@ -167,6 +173,19 @@ class SampleProcessing:
 	global headerstring #FIXME
 	headerstring+=code
 	ROOT.gInterpreter.Declare(code) 
+
+    def AddExternalCode(self, header, cppfiles=[],libs=[],ipaths=[],lpaths=[]):
+	self.cppfiles.extend(cppfiles)
+	self.libs.extend(libs)
+	self.ipaths.extend(ipaths)
+	self.lpaths.extend(lpaths)
+
+	global headerstring #FIXME
+	headerstring+='\n#include "%s"\n'%(header)
+	for p in ipaths :
+  	    ROOT.gInterpreter.AddIncludePath(p)
+	ROOT.gInterpreter.Declare('#include "%s"'%header) 
+
 
     def Inputs(self, colName):
         if colName not in self.inputs:
@@ -411,14 +430,33 @@ class SampleProcessing:
         self.histos["bin"] = binHint
 
 
+    def compileExternals(self):
+	 flags=""
+	 for p in self.ipaths: flags+=" -I%s"%p
+	 for p in self.lpaths: flags+=" -L%s"%p
+	 for p in self.libs: flags+=" -l%s"%p
+         cppfiles=" ".join(self.cppfiles)	
+	 os.system("g++ -fPIC -Wall -O3 %s $(root-config --libs --cflags)  -o libNailExternals.so --shared %s"%(cppfiles,flags))
+
+    def checkExternals(self):
+	if self.externalCreated :
+		return
+	self.compileExternals()
+	self.externalCreated=True
+	#TODO: check contente
+
     def CreateProcessor(self,name,outnodes,selections,snap,snapsel,nthreads=0,nottoprint=[],debug=False):
 	printed=self.printRDFCpp(outnodes,debug=debug,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name,nottoprint=nottoprint)
         import filecmp
+	self.checkExternals()
         if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C",name+"_autogen.C") :
 		os.system("cp tmp.C %s_autogen.C"%name)
 	        os.system("rm %s_autogen.so"%name)
         	#os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
-	        os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -L.  -lotherStuff -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
+	        #os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -L.  -lotherStuff -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
+		flags=" "
+                for p in self.ipaths: flags+=" -I%s"%p
+	        os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L.  -lNailExternals"%(name,name)+flags)
 	ROOT.gInterpreter.Declare('''
 	Result %s_nail(RNode rdf, int nThreads);
 	'''%name)
