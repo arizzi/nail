@@ -8,7 +8,7 @@ import copy
 from clang.cindex import CursorKind
 from clang.cindex import Index
 from clang.cindex import TypeKind
-headerstring = '''
+headerstringBase = '''
 #include <Math/VectorUtil.h>
 #include <ROOT/RVec.hxx>
 #include "Math/Vector4D.h"
@@ -103,7 +103,8 @@ class SampleProcessing:
         self.dupcode = False
 
     def init(self, name, cols, dftypes):
-        ROOT.gInterpreter.Declare(headerstring)
+	self.headerstring=headerstringBase
+        ROOT.gInterpreter.Declare(self.headerstring)
         self.name = name
         self.lazyParse = True
         self.cols = {}
@@ -170,8 +171,7 @@ class SampleProcessing:
 	self.dftypes[name]=ctype
 
     def AddCppCode(self, code) :
-	global headerstring #FIXME
-	headerstring+=code
+	self.headerstring+=code
 	ROOT.gInterpreter.Declare(code) 
 
     def AddExternalCode(self, header, cppfiles=[],libs=[],ipaths=[],lpaths=[]):
@@ -180,8 +180,7 @@ class SampleProcessing:
 	self.ipaths.extend(ipaths)
 	self.lpaths.extend(lpaths)
 
-	global headerstring #FIXME
-	headerstring+='\n#include "%s"\n'%(header)
+	self.headerstring+='\n#include "%s"\n'%(header)
 	for p in ipaths :
   	    ROOT.gInterpreter.AddIncludePath(p)
 	ROOT.gInterpreter.Declare('#include "%s"'%header) 
@@ -436,7 +435,7 @@ class SampleProcessing:
 	 for p in self.lpaths: flags+=" -L%s"%p
 	 for p in self.libs: flags+=" -l%s"%p
          cppfiles=" ".join(self.cppfiles)	
-	 os.system("g++ -fPIC -Wall -O3 %s $(root-config --libs --cflags)  -o libNailExternals.so --shared %s"%(cppfiles,flags))
+	 os.system("g++ -fPIC -Wall -O3 %s $(root-config --libs --cflags)  -o libNailExternals.so -I.  --shared %s"%(cppfiles,flags))
 
     def checkExternals(self):
 	if self.externalCreated :
@@ -456,6 +455,7 @@ class SampleProcessing:
 	        #os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -L.  -lotherStuff -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
 		flags=" "
                 for p in self.ipaths: flags+=" -I%s"%p
+	        print "Compiling with: g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L. -I.  -lNailExternals "%(name,name)+flags
 	        os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L.  -lNailExternals"%(name,name)+flags)
 	ROOT.gInterpreter.Declare('''
 	Result %s_nail(RNode rdf, int nThreads);
@@ -636,7 +636,7 @@ class SampleProcessing:
 #	print "Weights to print", weights
         f = open(outname, "w")
         ftxt = open(outname[:-2]+"-data.txt", "w")
-        f.write(headerstring+self.additionalcpp)
+        f.write(self.headerstring+self.additionalcpp)
         toprint = set(selections.keys() +
                       [x for t in to+weights for x in self.allNodesTo([t])])
 	toprint = [x for x in toprint if x not in nottoprint] 
