@@ -455,7 +455,7 @@ class SampleProcessing:
 	self.checkExternals()
 	#self.printRDFCpp(outnodes,debug=False,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
         #import filecmp
-        self.printRDFCpp(outnodes,debug=True,outname=name,selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
+        printed=self.printRDFCpp(outnodes,debug=True,outname=name,selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name)
         #import filecmp
         outname=name
         if True:
@@ -587,7 +587,11 @@ class SampleProcessing:
         fc.write('#include "main.h"\n')
 	if isDefine:
 	  fh.write('RNode define%s(RNode rdf);\n'%n)
-	  fc.write('RNode define%s(RNode rdf){ std::cout << "Here " << %s << std::endl; return rdf\n'%(n,n))
+	  fc.write('''RNode define%s(RNode rdf){ std::cout << "Here " << %s << " ncols:" <<  rdf.GetColumnNames().size() << std::endl;
+// auto colNames = rdf.GetColumnNames();
+// for (auto &&colName : colNames) std::cout << colName << std::endl;
+ return rdf\n'''%(n,n))
+	  
           f.write("auto rdf%d = define%d(rdf%s);\n"%(n,n,("%d"%(n-1)) if n-1>=0 else "" ))
 	return fc
  
