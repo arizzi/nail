@@ -391,6 +391,12 @@ class SampleProcessing:
         self.Variation(name, original, modified, exceptions)
 
     def Variation(self, name, original, modified, exceptions=[]):
+	if modified not in self.validCols:
+	    if name in self.validCols:
+		print "Cannot define variation",name," as ", modified," is not a columns but ",name,"already exists"
+		exit(1)
+	    self.Define(name,modified)
+	    modified=name
         self.variations[name] = {}
         self.variations[name]["original"] = original
         self.variations[name]["modified"] = modified
