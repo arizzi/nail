@@ -363,9 +363,9 @@ class SampleProcessing:
         self.Define("%s_%s%s" % (name2, name1, metricName),
                     "matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_%s)" % (name1, name2, defVal, name, metricName))
         self.Define("%s_%sIdx" % (name1, name2),
-                    "matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):%s;},%s_%s)" % (name1, name2, defIdx, name, metricName))
+                    "matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?int(Argmax(-v)):%s;},%s_%s)" % (name1, name2, defIdx, name, metricName))
         self.Define("%s_%sIdx" % (name2, name1),
-                    "matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):%s;},%s_%s)" % (name1, name2, defIdx, name, metricName))
+                    "matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?int(Argmax(-v)):%s;},%s_%s)" % (name1, name2, defIdx, name, metricName))
 
     def MatchDeltaR(self, name1, name2, embed=([], []), defIdx=-1, defVal=-99):
         name = name1+name2+"Pair"

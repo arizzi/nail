@@ -6,6 +6,7 @@
 #include "Math/Vector4D.h"
 #include <ROOT/RDataFrame.hxx>
 #include <TH1F.h>
+static int verbosecount = 100;
 
 template <typename type>
 auto Argmax(const type & v){
@@ -55,14 +56,14 @@ auto At(const type &v, size_t i,  typename type::value_type def){
 template <typename type>
 auto At(const type &v, size_t i){
  typedef typename type::value_type rettype;
- if(i>=v.size() || i < 0) {std::cout << "ERROR out of boundaries" << i  << " " <<  long (i) << " vs " <<  v.size() <<  std::endl;  return  rettype();}
+ if(i>=v.size() || i < 0) {if(verbosecount-->0) {std::cout << "ERROR out of boundaries" << i  << " " <<  long (i) << " vs " <<  v.size() <<  std::endl;}  return  rettype();}
  return v[i];
 }
 
 
 template <typename type,typename masktype>
 auto At(const type &v, const ROOT::VecOps::RVec<masktype> &m){
- if(v.size() != m.size()) {std::cout << "ERROR mismatch mask length" << std::endl;  return  v[ROOT::VecOps::RVec<masktype>(v.size())];}
+ if(v.size() != m.size()) {if(verbosecount-->0){std::cout << "ERROR mismatch mask length" << std::endl;  return  v[ROOT::VecOps::RVec<masktype>(v.size())];}}
  return v[m];
 }
 
