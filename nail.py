@@ -18,13 +18,16 @@ headerstringBase = '''
 #define P4DELTAR ROOT::Math::VectorUtil::DeltaR<ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>,ROOT::Math::LorentzVector<ROOT::Math::PtEtaPhiM4D<float>>> 
 //ROOT::Math::PtEtaPhiMVector,ROOT::Math::PtEtaPhiMVector> 
 #include <vector>
+#include <map>
 #include <utility>
+using namespace std;
 #ifndef NAILSTUFF
 #define NAILSTUFF
 using RNode = ROOT::RDF::RNode;
 struct Result {
- Result(RNode  rdf_): rdf(rdf_){}
- RNode rdf;
+ Result() {}
+// Result(RNode  rdf_) {rdf[""]=rdf_;}
+ std::map<std::string,RNode> rdf;
  ROOT::RDF::RResultPtr<TH1D> histo;
  std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;
 };
@@ -353,6 +356,12 @@ class SampleProcessing:
         else:
             print "Attempt to redefine column", name, " => noop"
 
+#   def MatchIndex(self, name1, name2, , defIdx=-1, defVal=-99):
+ #      name = name1+name2+"Pair"
+ #      self.Define(name, "Combinations(n%s,n%s)" % (name1, name2))
+  #     self.Define("%s_%s" % (name, metricName), "vector_map(%s,Take(%s_p4,At(%s,0)),Take(%s_p4,At(%s,1)))" % (
+  #         metric, name1, name, name2, name))
+
     def Match(self, name1, name2, metric="P4DELTAR", metricName="Dr", embed=([], []), defIdx=-1, defVal=-99):
         name = name1+name2+"Pair"
         self.Define(name, "Combinations(n%s,n%s)" % (name1, name2))
@@ -528,12 +537,13 @@ class SampleProcessing:
         res = []
         for name, selections in selectionsSets.iteritems():
             #    name=selSetName(selections)
-            print "define weight", name
+#            print "define weight", name, selections
             weights = set()
             if name == "" and "" in self.centralWeights:
                 weights.update(self.centralWeights[""])
             for s in selections:
                 weights.update(self.recursiveGetWeights(s))
+#            print weights
             for variation in ["Central"]+self.variationWeights.keys():
                 replacedWeights = weights
                 same = False
@@ -637,7 +647,7 @@ class SampleProcessing:
 
 # AR###	selections.append("")
 
-#	print "Sels are",sels
+	print "Sels are",sels
         weights = self.defineWeights(sels)
 #	print "Weights to print", weights
         f = open(outname, "w")
@@ -659,9 +669,10 @@ class SampleProcessing:
         if lib :
 	   f.write('''
 Result %s_nail(RNode rdf,int nThreads) {
+     Result r;
      if(nThreads > 0)
      ROOT::EnableImplicitMT(nThreads);
-
+	
 	   '''%libname)
 	else:
           f.write('''
@@ -738,6 +749,9 @@ int main(int argc, char** argv)
                         for ss in sellist[1:]:
                             f.write('.Filter("%s","%s")' % (ss, ss))
                         f.write(";\n")
+			if lib:
+                            f.write('r.rdf.emplace("%s",selection_%s);\n'%(selname,selname))
+
                         selsprinted.append(selname)
                         f.write("{")
                         f.write('loadHistograms(%s,"%s",histos);\n' % (
@@ -788,7 +802,8 @@ int main(int argc, char** argv)
             else:
                 snapGood.append(t)
 	if lib :
-          f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdf)
+          #f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdf)
+          f.write(';\nr.rdf.emplace("",%s);\nr.histos=histos; return r;}'%rdf)
 #          f.write(';\n return std::pair<RNode,std::vector<int> >(%s,std::vector<int>());}'%rdflast)
 #	  f.write(';\n return %s;}'%rdflast)
 	else : 
@@ -954,9 +969,11 @@ int main(int argc, char** argv)
     def createSystematicBranches(self, systematics, selWithHistos):
         res = copy.deepcopy(selWithHistos)
         for syst in systematics:
-            print "creating systematic", syst
-            weights = self.createVariationBranch(syst, self.defineWeights(selWithHistos))
-            print "created weights", weights
+#            print "creating systematic", syst
+            selWithReqs={sel:self.sortedUniqueColumns(self.Requirements(sel)) for sel in selWithHistos}
+            weights = self.createVariationBranch(syst, self.defineWeights(selWithReqs))
+#	    print "sels are",selWithReqs
+#            print "created weights", weights
             for sel in selWithHistos:
                 selWsyst = self.createVariationBranch(syst, [sel])
                 histos = self.createVariationBranch(syst, selWithHistos[sel])
