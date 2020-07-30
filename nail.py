@@ -334,7 +334,7 @@ class SampleProcessing:
 
         else:
 	    if code!=self.code[name] :
-		print "DIFFERENT CODE IN REDEFINE", code, "\n-- vs -- \n", self.code[name]
+		print "DIFFERENT CODE for ", name, "IN REDEFINE", code, "\n-- vs -- \n", self.code[name]
 		exit(1)
             print "Attempt to redefine column", name, " the code is the same => noop"
 
@@ -426,7 +426,7 @@ class SampleProcessing:
             if s not in self.centralWeights:
                 self.centralWeights[s] = []
             self.centralWeights[s].append(name)
-#	   if s!="": #FIXME: seems a bug to me
+#	   if s!="": #FIXME: seems a bug to me... chicken and egg... is the weight that depends on the selection or viceversa? here selection means the selection it applies to or the selections needed to compute the weight?
 #	       self.addInput(s,name)
 
     def VariationWeight(self, name, replacing="", filt=lambda sname, hname, wname: "__syst__" not in hname and "__syst__" not in sname):
@@ -453,6 +453,7 @@ class SampleProcessing:
 	 os.system("g++ -fPIC -Wall -O3 %s $(root-config --libs --cflags)  -o libNailExternals.so -I.  --shared %s"%(cppfiles,flags))
 
     def checkExternals(self):
+	#return
 	if self.externalCreated :
 		return
 	self.compileExternals()
@@ -506,10 +507,18 @@ class SampleProcessing:
         #	if "__syst__" in sel :
         #	    return self.recursiveGetWeights(sel[:sel.find("__syst__")])
         res = set(self.centralWeights[""])
+#	print sel,self.centralWeights,(sel in self.centralWeights)
         if sel in self.centralWeights:
+#	    print "res ce was",res
+#	    print "res ce up",self.centralWeights[sel]
             res.update(self.centralWeights[sel])
+#	    print "res ce is",res
         for dep in self.Requirements(sel):
-            res.update(self.recursiveGetWeights(dep))
+	    rec=self.recursiveGetWeights(dep)
+#	    print "res was",res
+#	    print "res up",rec
+            res.update(rec) #self.recursiveGetWeights(dep))
+#	    print "res is",res
 #	print res
         return res
 
@@ -537,13 +546,15 @@ class SampleProcessing:
         res = []
         for name, selections in selectionsSets.iteritems():
             #    name=selSetName(selections)
-#            print "define weight", name, selections
+            print "define weight", name, selections
             weights = set()
             if name == "" and "" in self.centralWeights:
                 weights.update(self.centralWeights[""])
+	    if name in self.centralWeights :
+	        weights.update(self.centralWeights[name])
             for s in selections:
                 weights.update(self.recursiveGetWeights(s))
-#            print weights
+            print weights
             for variation in ["Central"]+self.variationWeights.keys():
                 replacedWeights = weights
                 same = False
@@ -555,6 +566,7 @@ class SampleProcessing:
                     if not replacedWeights:
                         self.Define("%sWeight__%s" % (name, variation), "1.")
                     else:
+			print "DEFINE:","%sWeight__%s" %   (name, variation), "*".join(replacedWeights)
                         self.Define("%sWeight__%s" %
                                     (name, variation), "*".join(replacedWeights))
                     res.append("%sWeight__%s" % (name, variation))
@@ -649,7 +661,7 @@ class SampleProcessing:
 
 	print "Sels are",sels
         weights = self.defineWeights(sels)
-#	print "Weights to print", weights
+	print "Weights to print", weights
         f = open(outname, "w")
         ftxt = open(outname[:-2]+"-data.txt", "w")
         f.write(self.headerstring+self.additionalcpp)
@@ -754,8 +766,8 @@ int main(int argc, char** argv)
 
                         selsprinted.append(selname)
                         f.write("{")
-                        f.write('loadHistograms(%s,"%s",histos);\n' % (
-                            "selection_%s" % selname, "selection_%s" % selname))
+#                        f.write('loadHistograms(%s,"%s",histos);\n' % (
+ #                           "selection_%s" % selname, "selection_%s" % selname))
                     rdf = "selection_%s" % selname
                 else:
                     rdf = rdflast
@@ -907,12 +919,21 @@ int main(int argc, char** argv)
 
     def createVariationBranch(self, name, target,varsuffix="__syst__"):
         #	 print >> sys.stderr, "Find affected"
-        affected = (self.findAffectedNodesForVariationOnTargets(name, target))
+	
+	cenWeights=[]	
+	for t in target:
+	   if t in self.centralWeights :
+		cenWeights+=self.centralWeights[t]
+
+        affected = (self.findAffectedNodesForVariationOnTargets(name, target+cenWeights))
+	print "Affected nodes for ",name , target
+	print affected
 #	 print >> sys.stderr, "Found affected\n", affected
         # keep original sorting
         affected.sort(key=lambda x: self.validCols.index(x))
         res = [y+varsuffix+name for y in affected if y in target]
         replacementTable = [(x, x+varsuffix+name) for x in affected]
+	print replacementTable
         for x, x_syst in replacementTable:
             ncode = ""
             if self.dupcode:
@@ -956,9 +977,12 @@ int main(int argc, char** argv)
                         self.Selection(x_syst, ncode, requires=selections)
                         # FIXME: weights
                     else:
+			print "Defining", x_syst
                         self.Selection(x_syst, ncode, original=x,
                                        inputs=replacedinputs, requires=selections)
                         if x in self.centralWeights:
+			    print "has central weights"
+			    print "Repdict:",repdict
                             replacedweights = [
                                 (c if c not in repdict else repdict[c]) for c in self.centralWeights[x]]
                             self.centralWeights[x_syst] = replacedweights
