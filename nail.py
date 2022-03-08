@@ -387,9 +387,9 @@ class SampleProcessing:
         self.Define("%s_%sDr" % (name2, name1),
                     "matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?(-Max(-v)):%s;},%s_dr)" % (name1, name2, defVal, name))
         self.Define("%s_%sIdx" % (name1, name2),
-                    "matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):%s;},%s_dr)" % (name1, name2, defIdx, name))
+                    "matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) -> int {return v.size()>0?Argmax(-v):%s;},%s_dr)" % (name1, name2, defIdx, name))
         self.Define("%s_%sIdx" % (name2, name1),
-                    "matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?Argmax(-v):%s;},%s_dr)" % (name1, name2, defIdx, name))
+                    "matrix_map(n%s,n%s,0,[](const ROOT::VecOps::RVec<float> & v) -> int {return v.size()>0?Argmax(-v):%s;},%s_dr)" % (name1, name2, defIdx, name))
 # FIXME: embedding is broken
 #	for attr in embed[0] :
 #            self.Define("%s_%s%s"%(name1,name2,attr.capitalize()),"matrix_map(n%s,n%s,1,[](const ROOT::VecOps::RVec<float> & v) {return v.size()>0?%s_%s[Argmax(-v)]:%s;},%s_dr)"%(name1,name2,name2,attr,defVal,name))

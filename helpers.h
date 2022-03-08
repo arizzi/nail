@@ -109,10 +109,10 @@ float btagWeightUp(float csv,float pt,float eta){
  return 1.0;
 }
 
-float efficiency(float pt,float eta,int pid){
- if(pid==11) return 0.99;
- if(pid==13) return 0.92;
-}
+//float efficiency(float pt,float eta,int pid){
+// if(pid==11) return 0.99;
+// if(pid==13) return 0.92;
+//}
 template <typename T, typename T2>
 ROOT::VecOps::RVec<T> Concat(const ROOT::VecOps::RVec<T> & v1,  const ROOT::VecOps::RVec<T2> & v2){
 ROOT::VecOps::RVec<T> v;
