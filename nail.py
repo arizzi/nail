@@ -483,7 +483,8 @@ class SampleProcessing:
         '''%nthreads)
 	print "Loading ",name+"_autogen.so"
 	ROOT.gSystem.Load(name+"_autogen.so")
-        CastToRNode= lambda node: ROOT.NodeCaster(node.__cppname__).Cast(node)
+        CastToRNode= lambda node: ROOT.RDF.AsRNode(node)
+#lambda node: ROOT.NodeCaster(node.__cppname__).Cast(node)
 	fu=(lambda rdf: getattr(ROOT,name+"_nail")(CastToRNode(rdf),nthreads) )
 	fu.produces=printed
 	return fu
