@@ -1,4 +1,4 @@
-from .nail import *
+from nail import *
 import ROOT
 
 flow = SampleProcessing(
