@@ -20,12 +20,12 @@ from histograms import histosPerSelection
 systematics=flow.variations #take all systematic variations
 histosWithSystematics=flow.createSystematicBranches(systematics,histosPerSelection)
 
-print "The following histograms will be created in the following regions"
+print("The following histograms will be created in the following regions")
 for sel in  histosWithSystematics:
-	print sel,":",histosWithSystematics[sel]
+	print(sel,":",histosWithSystematics[sel])
 
 
-print >> sys.stderr, "Number of known columns", len(flow.validCols)
+print("Number of known columns", len(flow.validCols), file=sys.stderr)
 
 
 #snap=["SideBand","nSoftActivityJet","SoftActivityJet_pt","SoftActivityJet_eta","SoftActivityJet_phi","SoftActivityJet_SelectedJetDr","SoftActivityJet_SelectedJetIdx","SoftActivityJet_SelectedMuonDr","SoftActivityJet_SelectedMuonIdx","VBFRegion","QJet0_pt","QJet0_eta","QJet0_btagCSVV2","QJet1_pt","QJet1_eta","QJet1_btagCSVV2","Mu0_pt","Mu0_eta","Mu1_pt","Mu1_eta","QJet0","QJet1","qqDeltaEta","MqqGenJet"]
@@ -77,18 +77,18 @@ import psutil
 def f(ar):
 #f,s,i=ar
      p = psutil.Process()
-     print "Affinity",p.cpu_affinity()
+     print("Affinity",p.cpu_affinity())
      p.cpu_affinity( list(range(psutil.cpu_count())))
-     print "After set Affinity",p.cpu_affinity()
+     print("After set Affinity",p.cpu_affinity())
      s,f=ar
-     print f
+     print(f)
      ROOT.gROOT.ProcessLine('''
      ROOT::EnableImplicitMT(20);
      ''')
      vf=ROOT.vector("string")()
-     map(lambda x : vf.push_back(x), f)
+     list(map(lambda x : vf.push_back(x), f))
      for x in vf:
-	print x
+	print(x)
      rdf=ROOT.RDataFrame("Events",vf)
      if rdf :
        try:
@@ -98,7 +98,7 @@ def f(ar):
 	   rdf=rdf.Define("puWeight","1.0f")
 	   rdf=rdf.Define("btagWeight_CSVV2","1.0f")
 	   rdf=rdf.Define("Jet_pt_nom","Jet_pt")
-	   print "Defined"
+	   print("Defined")
 	 else :
 	   rdf=rdf.Define("isMC","true")
 	 if "filter" in samples[s] :
@@ -112,33 +112,33 @@ def f(ar):
          # inferred.
          #snaplist=["QJet0_pt","QJet1_pt","QJet0_eta","QJet1_eta","Mqq","Higgs_pt","twoJets","twoOppositeSignMuons","PreSel","VBFRegion","MassWindow","SignalRegion"]
          branchList = ROOT.vector('string')()
-	 map(lambda x : branchList.push_back(x), snaplist)
+	 list(map(lambda x : branchList.push_back(x), snaplist))
 
   #       ou.rdf.Filter("twoMuons","twoMuons").Filter("twoOppositeSignMuons","twoOppositeSignMuons").Filter("twoJets","twoJets").Filter("MassWindow","MassWindow").Filter("VBFRegion","VBFRegion").Filter("PreSel","PreSel").Filter("SignalRegion","SignalRegion").Snapshot("Events","out/%sSnapshot.root"%(s),branchList)
   #       ou.rdf.Filter("event==24331988").Snapshot("Events","out/%sEventPick.root"%(s),branchList)
-         print ou.histos.size()
+         print(ou.histos.size())
          for h in ou.histos :
 #	    print h
  	    h.Write()
          fff.Write()
          fff.Close()
 	 return 0
-       except Exception, e: 
-	 print e
-	 print "FAIL",f
+       except Exception as e: 
+	 print(e)
+	 print("FAIL",f)
 	 return 1
      else :
-	print "Null file",f
+	print("Null file",f)
 
 #     return  os.system("./eventProcessor %s %s out/%s%s "%(4,f,s,i))  
 
 from multiprocessing import Pool
 runpool = Pool(20)
 
-print samples.keys()
-sams=samples.keys()
+print(list(samples.keys()))
+sams=list(samples.keys())
 
 #sams=["DY2J","TTlep"]
 #toproc=[(x,y,i) for y in sams for i,x in enumerate(samples[y]["files"])]
 toproc=[ (s,samples[s]["files"]) for s in sams ]
-print zip(runpool.map(f, toproc ),sams)
+print(list(zip(runpool.map(f, toproc ),sams)))

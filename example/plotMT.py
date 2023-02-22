@@ -20,7 +20,7 @@ def findSyst(hn,sy,f) :
     h1=hn+"__syst__"+sy    
     h2=re.sub("___","__syst__"+sy+"___",hn)    
     h3=re.sub("___","__syst__"+sy+"___",hn)+"__syst__"+sy    
-    print "Syst options",h1,h2,h3
+    print("Syst options",h1,h2,h3)
     if h1 in allh:
 	 hnForSys[hn]=h1
 	 return h1
@@ -30,7 +30,7 @@ def findSyst(hn,sy,f) :
     if h3 in allh:
 	 hnForSys[hn]=h3
 	 return h3
-    print "none matching"
+    print("none matching")
     return ""
 
 def totevents(s):
@@ -48,7 +48,7 @@ def totevents(s):
 	    totev[s]+=hw.GetSumOfWeights()
 	    run.Project("hw","1","genEventCount")
 	    totevCount[s]+=hw.GetSumOfWeights()
-	    print totev[s]
+	    print(totev[s])
 #    print "returning",totev[s], "for",s
     return totev[s]
 
@@ -82,7 +82,7 @@ histoSigsumSyst={}
 ROOT.gStyle.SetOptStat(0)
 def makeplot(hn):
  if "__syst__" not in hn and "LHE" not in hn :
-   print "Making histo",hn
+   print("Making histo",hn)
    histos[hn]=ROOT.THStack(hn,hn) 
    histosSig[hn]=ROOT.THStack(hn,hn) 
    datastack[hn]=ROOT.THStack(hn,hn) 
@@ -146,7 +146,7 @@ def makeplot(hn):
 	   	    hs.Scale(samples[b]["xsec"]/nevents*lumitot)
                     histosumSyst[hn][sy].Add(hs)
 		  else :
-		    print "using unchanged histo"
+		    print("using unchanged histo")
                     histosumSyst[hn][sy].Add(h)
 	   histos[hn].Add(h)
 
@@ -181,7 +181,7 @@ def makeplot(hn):
            	    hs.Scale(samples[b]["xsec"]/nevents*lumitot)
                     histoSigsumSyst[hn][sy].Add(hs)
 		  else :
-		    print "Not found",hn+"__syst__"+sy
+		    print("Not found",hn+"__syst__"+sy)
                     histoSigsumSyst[hn][sy].Add(h)
            histosSig[hn].Add(h)
            histos[hn].Add(h)
@@ -190,14 +190,14 @@ def makeplot(hn):
    lastBlind=-1
    for i in range(histosSig[hn].GetStack().Last().GetNbinsX()) :
 	if histosSig[hn].GetStack().Last().GetBinContent(i) > 0.1*sqrt(abs(histos[hn].GetStack().Last().GetBinContent(i))) and histosSig[hn].GetStack().Last().GetBinContent(i)/(0.1+abs(histos[hn].GetStack().Last().GetBinContent(i))) > 0.05 :
-		print "to blind",hn,i,abs(histos[hn].GetStack().Last().GetBinContent(i)), histosSig[hn].GetStack().Last().GetBinContent(i)	
+		print("to blind",hn,i,abs(histos[hn].GetStack().Last().GetBinContent(i)), histosSig[hn].GetStack().Last().GetBinContent(i))	
 	        if i < firstBlind:
 		    firstBlind=i
                 lastBlind=i
    for i in range(firstBlind,lastBlind) :
        datastack[hn].GetStack().Last().SetBinContent(i,0)
        datasum[hn].SetBinContent(i,0)
-       print "blinded",i,hn
+       print("blinded",i,hn)
    canvas[hn].cd(1)
    datastack[hn].Draw("E P")
    datastack[hn].GetXaxis().SetTitle(hn)
@@ -226,7 +226,7 @@ def makeplot(hn):
        ratiosy[-1].SetLineStyle(j)
        ratiosy[-1].SetFillStyle(0)
        ratiosy[-1].Draw("same hist")
-       print "Heu",hn,sy,histosumSyst[hn][sy].Integral(),histosum[hn].Integral(),lumitot,ratiosy[-1]
+       print("Heu",hn,sy,histosumSyst[hn][sy].Integral(),histosum[hn].Integral(),lumitot,ratiosy[-1])
 #   systematics=[x for x in histoNames if x[:hn.find("___")]==hn[:hn.find("___")] and "__syst__" in x]
 #   print "available systematics",hn,systematics
 #  for s in systematics:
@@ -239,7 +239,7 @@ def makeplot(hn):
 
 
 his=[x for x in histoNames if "__syst__" not in x]
-print his[0]
+print(his[0])
 makeplot(his[0]) #do once for caching normalizations
 
 if True:
@@ -255,4 +255,4 @@ tot=0
 for s in totevCount:
   tot+=totevSkim[s]
 
-print tot, "input events" 
+print(tot, "input events") 

@@ -3,7 +3,8 @@ from collections import OrderedDict
 from hashlib import md5
 import clang.cindex
 import re
-import os,sys
+import os
+import sys
 import copy
 from clang.cindex import CursorKind
 from clang.cindex import Index
@@ -43,17 +44,19 @@ class NodeCaster {
 '''
 
 
+knownTypes = {}
 
-knownTypes={}
+
 def returnType(code, function):
-    if function not in knownTypes :
-      myFuncCode = code
-      ROOT.gInterpreter.Declare(myFuncCode)
-      getTypeNameF = "auto %s_typestring=ROOT::Internal::RDF::TypeID2TypeName(typeid(ROOT::TypeTraits::CallableTraits<decltype(%s)>::ret_type));" % (
-        function, function)
-      ROOT.gInterpreter.ProcessLine(getTypeNameF)
-      knownTypes[function]=getattr(ROOT, "%s_typestring" % function)
+    if function not in knownTypes:
+        myFuncCode = code
+        ROOT.gInterpreter.Declare(myFuncCode)
+        getTypeNameF = "auto %s_typestring=ROOT::Internal::RDF::TypeID2TypeName(typeid(ROOT::TypeTraits::CallableTraits<decltype(%s)>::ret_type));" % (
+            function, function)
+        ROOT.gInterpreter.ProcessLine(getTypeNameF)
+        knownTypes[function] = getattr(ROOT, "%s_typestring" % function)
     return knownTypes[function]
+
 
 whatever = '''  idx = clang.cindex.Index.create()
   tu = idx.parse('tmp.cpp', args=['-std=c++14'], unsaved_files=[('tmp.cpp', headerstring+code)],  options=0)
@@ -106,7 +109,7 @@ class SampleProcessing:
         self.dupcode = False
 
     def init(self, name, cols, dftypes):
-	self.headerstring=headerstringBase
+        self.headerstring = headerstringBase
         ROOT.gInterpreter.Declare(self.headerstring)
         self.name = name
         self.lazyParse = True
@@ -129,17 +132,17 @@ class SampleProcessing:
         self.validCols = [x[0] for x in cols]
         self.inputTypes = {x[0]: x[1] for x in cols}
         self.dftypes = dftypes
-	self.binningRules =[]
-	self.additionalcpp=""
-	self.md5s={}
-	self.generatedCode={}
-#stuff for external code:
-	self.cppfiles=[]
-	self.lpaths=[]
-	self.ipaths=[]
-	self.libs=[]
-	self.externalCreated=False
-        print >> sys.stderr, "Start"
+        self.binningRules = []
+        self.additionalcpp = ""
+        self.md5s = {}
+        self.generatedCode = {}
+# stuff for external code:
+        self.cppfiles = []
+        self.lpaths = []
+        self.ipaths = []
+        self.libs = []
+        self.externalCreated = False
+        print("Start", file=sys.stderr)
 #	print self.inputTypes
         for c, t in cols:
             self.inputs[c] = []
@@ -161,33 +164,31 @@ class SampleProcessing:
         self.nodesto = {}
 #	self.Define("defaultWeight","1.")
 
-
-    def AddExpectedInput(self, name,ctype):
+    def AddExpectedInput(self, name, ctype):
         if name in self.validCols:
-	    print "Attempting to add a known input", name," => noop"	
-	    return
-        self.validCols.append(name) 
-        self.inputTypes[name]=ctype
-	self.inputs[name]=[]
-        self.requirements[name]=[]
-	self.originalCols.append((name,ctype))
-	self.dftypes[name]=ctype
+            print("Attempting to add a known input", name, " => noop")
+            return
+        self.validCols.append(name)
+        self.inputTypes[name] = ctype
+        self.inputs[name] = []
+        self.requirements[name] = []
+        self.originalCols.append((name, ctype))
+        self.dftypes[name] = ctype
 
-    def AddCppCode(self, code) :
-	self.headerstring+=code
-	ROOT.gInterpreter.Declare(code) 
+    def AddCppCode(self, code):
+        self.headerstring += code
+        ROOT.gInterpreter.Declare(code)
 
-    def AddExternalCode(self, header, cppfiles=[],libs=[],ipaths=[],lpaths=[]):
-	self.cppfiles.extend(cppfiles)
-	self.libs.extend(libs)
-	self.ipaths.extend(ipaths)
-	self.lpaths.extend(lpaths)
+    def AddExternalCode(self, header, cppfiles=[], libs=[], ipaths=[], lpaths=[]):
+        self.cppfiles.extend(cppfiles)
+        self.libs.extend(libs)
+        self.ipaths.extend(ipaths)
+        self.lpaths.extend(lpaths)
 
-	self.headerstring+='\n#include "%s"\n'%(header)
-	for p in ipaths :
-  	    ROOT.gInterpreter.AddIncludePath(p)
-	ROOT.gInterpreter.Declare('#include "%s"'%header) 
-
+        self.headerstring += '\n#include "%s"\n' % (header)
+        for p in ipaths:
+            ROOT.gInterpreter.AddIncludePath(p)
+        ROOT.gInterpreter.Declare('#include "%s"' % header)
 
     def Inputs(self, colName):
         if colName not in self.inputs:
@@ -208,7 +209,7 @@ class SampleProcessing:
 
     def DefaultConfig(self, **kwargs):
         self.conf.update(kwargs)
-        for k in kwargs.keys():
+        for k in list(kwargs.keys()):
             self.Define(k, "%s" % (kwargs[k]))
 
     def colsForObject(self, name):
@@ -217,7 +218,7 @@ class SampleProcessing:
 
     def MergeCollections(self, name, collections, requires=[]):
         commonCols = set(self.colsForObject(collections[0]))
-        #print commonCols
+        # print commonCols
         for coll in collections[1:]:
             commonCols = commonCols.intersection(self.colsForObject(coll))
         self.Define("n"+name, "+".join(["n"+coll for coll in collections]))
@@ -258,30 +259,31 @@ class SampleProcessing:
     def ObjectAt(self, name, existing, index="", requires=[]):
         self.SubCollection(name, existing, index, requires, True)
 
-    def Distinct(self, name, collection,  requires=[],n=2):
-	if n!=2 and n!=3:
-	    print "Not implemented n=",n #need proper Combinations or Distinct function in RDF
-	    exit(1)
+    def Distinct(self, name, collection,  requires=[], n=2):
+        if n != 2 and n != 3:
+            # need proper Combinations or Distinct function in RDF
+            print("Not implemented n=", n)
+            exit(1)
 
         if collection not in self.validCols:
             if "n%s" % collection in self.validCols:
                 self.Define(collection, "ROOT::VecOps::RVec<unsigned int>(n%s,true)" %
                             collection, requires=requires)
             else:
-                print "Cannot find collection", collection
+                print("Cannot find collection", collection)
                 return
 
-	if n==2:
+        if n == 2:
             self.Define("%s_allpairs" % name, "Combinations(Nonzero(%s),Nonzero(%s))" % (
-                 collection, collection), requires=requires)
+                collection, collection), requires=requires)
             self.Define(name, "At(%s_allpairs,0) < At(%s_allpairs,1)" %
-                    (name, name), requires=requires)
-	else:
+                        (name, name), requires=requires)
+        else:
             self.Define("%s_allpairs" % name, "Combinations(n%s,n%s,n%s)" % (
-                 collection, collection,collection), requires=requires)
+                collection, collection, collection), requires=requires)
             self.Define(name, "At(%s_allpairs,0) < At(%s_allpairs,1) && At(%s_allpairs,1) < At(%s_allpairs,2)  " %
-                    (name, name, name, name), requires=requires)
-	
+                        (name, name, name, name), requires=requires)
+
         self.Define("%s0" % name, "At(At(%s_allpairs,0),%s)" %
                     (name, name), requires=requires)
         self.Define("%s1" % name, "At(At(%s_allpairs,1),%s)" %
@@ -290,22 +292,20 @@ class SampleProcessing:
             "%s0" % name, collection, requires=requires)
         self.SubCollectionFromIndices(
             "%s1" % name, collection, requires=requires)
-	if n==3 :
+        if n == 3:
             self.Define("%s2" % name, "At(At(%s_allpairs,2),%s)" %
-                    (name, name), requires=requires)
+                        (name, name), requires=requires)
             self.SubCollectionFromIndices(
                 "%s2" % name, collection, requires=requires)
 
-
-
-
-    def TakePair(self, name, existing, pairs, index, requires=[],ind=[0,1]):
+    def TakePair(self, name, existing, pairs, index, requires=[], ind=[0, 1]):
         self.Define("%s_index" % (name), index, requires=requires)
         for i in ind:
             self.ObjectAt("%s%s" % (name, i), existing, "int(At(%s%s,%s_index))" % (
                 pairs, i, name), requires=requires)
+
     def TakeTriplet(self, name, existing, pairs, index, requires=[]):
-	self.TakePair(name, existing, pairs, index, requires,[0,1,2])
+        self.TakePair(name, existing, pairs, index, requires, [0, 1, 2])
 
 #    def DefineWithWildCards(self,name,function,inputs,requires=[])
         # need for example for HLT bits
@@ -333,10 +333,12 @@ class SampleProcessing:
                     requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
 
         else:
-	    if code!=self.code[name] :
-		print "DIFFERENT CODE for ", name, "IN REDEFINE", code, "\n-- vs -- \n", self.code[name]
-		exit(1)
-            print "Attempt to redefine column", name, " the code is the same => noop"
+            if code != self.code[name]:
+                print("DIFFERENT CODE for ", name, "IN REDEFINE",
+                      code, "\n-- vs -- \n", self.code[name])
+                exit(1)
+            print("Attempt to redefine column", name,
+                  " the code is the same => noop")
 
     def Selection(self, name, code, inputs=[], requires=[], original=""):
         if name not in self.validCols:
@@ -354,7 +356,7 @@ class SampleProcessing:
                     requires+[y for x in self.inputs[name] if x in self.requirements for y in self.requirements[x]]))
 
         else:
-            print "Attempt to redefine column", name, " => noop"
+            print("Attempt to redefine column", name, " => noop")
 
 #   def MatchIndex(self, name1, name2, , defIdx=-1, defVal=-99):
  #      name = name1+name2+"Pair"
@@ -400,12 +402,13 @@ class SampleProcessing:
         self.Variation(name, original, modified, exceptions)
 
     def Variation(self, name, original, modified, exceptions=[]):
-	if modified not in self.validCols:
-	    if name in self.validCols:
-		print "Cannot define variation",name," as ", modified," is not a columns but ",name,"already exists"
-		exit(1)
-	    self.Define(name,modified)
-	    modified=name
+        if modified not in self.validCols:
+            if name in self.validCols:
+                print("Cannot define variation", name, " as ", modified,
+                      " is not a columns but ", name, "already exists")
+                exit(1)
+            self.Define(name, modified)
+            modified = name
         self.variations[name] = {}
         self.variations[name]["original"] = original
         self.variations[name]["modified"] = modified
@@ -420,8 +423,9 @@ class SampleProcessing:
             missing = [x for x in self.Requirements(name) if x not in (
                 self.Requirements(s)+[s] if s != "" else [])]
             if len(missing) > 0:
-                print "Cannot add weight", name, "on selection", s, "because", name, "requires the following additional selections"
-                print missing
+                print("Cannot add weight", name, "on selection", s, "because",
+                      name, "requires the following additional selections")
+                print(missing)
                 exit(1)
             if s not in self.centralWeights:
                 self.centralWeights[s] = []
@@ -443,65 +447,70 @@ class SampleProcessing:
         self.histos[name] = {}
         self.histos["bin"] = binHint
 
-
     def compileExternals(self):
-	 flags=""
-	 for p in self.ipaths: flags+=" -I%s"%p
-	 for p in self.lpaths: flags+=" -L%s"%p
-	 for p in self.libs: flags+=" -l%s"%p
-         cppfiles=" ".join(self.cppfiles)	
-	 os.system("g++ -fPIC -Wall -O3 %s $(root-config --libs --cflags)  -o libNailExternals.so -I.  --shared %s"%(cppfiles,flags))
+        flags = ""
+        for p in self.ipaths:
+            flags += " -I%s" % p
+        for p in self.lpaths:
+            flags += " -L%s" % p
+        for p in self.libs:
+            flags += " -l%s" % p
+        cppfiles = " ".join(self.cppfiles)
+        os.system(
+            "g++ -fPIC -Wall -O3 %s $(root-config --libs --cflags)  -o libNailExternals.so -I.  --shared %s" % (cppfiles, flags))
 
     def checkExternals(self):
-	#return
-	if self.externalCreated :
-		return
-	self.compileExternals()
-	self.externalCreated=True
-	#TODO: check contente
+        # return
+        if self.externalCreated:
+            return
+        self.compileExternals()
+        self.externalCreated = True
+        # TODO: check contente
 
-    def CreateProcessor(self,name,outnodes,selections,snap,snapsel,nthreads=0,nottoprint=[],debug=False):
-	printed=self.printRDFCpp(outnodes,debug=debug,outname="tmp.C",selections=selections,snap=snap,snapsel=snapsel,lib=True,libname=name,nottoprint=nottoprint)
+    def CreateProcessor(self, name, outnodes, selections, snap, snapsel, nthreads=0, nottoprint=[], debug=False):
+        printed = self.printRDFCpp(outnodes, debug=debug, outname="tmp.C", selections=selections,
+                                   snap=snap, snapsel=snapsel, lib=True, libname=name, nottoprint=nottoprint)
         import filecmp
-	self.checkExternals()
-        if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C",name+"_autogen.C") :
-		os.system("cp tmp.C %s_autogen.C"%name)
-	        os.system("rm %s_autogen.so"%name)
-        	#os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
-	        #os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -L.  -lotherStuff -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
-		flags=" "
-                for p in self.ipaths: flags+=" -I%s"%p
-	        print "Compiling with: g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L. -I.  -lNailExternals "%(name,name)+flags
-	        os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L.  -lNailExternals"%(name,name)+flags)
-	ROOT.gInterpreter.Declare('''
+        self.checkExternals()
+        if not os.path.isfile(name+"_autogen.C") or not filecmp.cmp("tmp.C", name+"_autogen.C"):
+            os.system("cp tmp.C %s_autogen.C" % name)
+            os.system("rm %s_autogen.so" % name)
+            #os.system("g++ -fPIC -Wall -O3 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.."%(name,name))
+            #os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -lTMVA -I.. -llwtnn -L/scratch/lgiannini/HmmPisa/lwtnn/build/lib/ -L.  -lotherStuff -I/scratch/lgiannini/HmmPisa/lwtnn/include/lwtnn/"%(name,name))
+            flags = " "
+            for p in self.ipaths:
+                flags += " -I%s" % p
+            print("Compiling with: g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L. -I.  -lNailExternals " % (name, name)+flags)
+            os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L.  -lNailExternals" % (name, name)+flags)
+        ROOT.gInterpreter.Declare('''
 	Result %s_nail(RNode rdf, int nThreads);
-	'''%name)
-	print "Setting nthreads",nthreads
-	if nthreads > 0 :
+	''' % name)
+        print("Setting nthreads", nthreads)
+        if nthreads > 0:
             ROOT.gROOT.ProcessLine('''
         ROOT::EnableImplicitMT(%s);
-        '''%nthreads)
-	print "Loading ",name+"_autogen.so"
-	ROOT.gSystem.Load(name+"_autogen.so")
-        CastToRNode= lambda node: ROOT.RDF.AsRNode(node)
+        ''' % nthreads)
+        print("Loading ", name+"_autogen.so")
+        ROOT.gSystem.Load(name+"_autogen.so")
+        def CastToRNode(node): return ROOT.RDF.AsRNode(node)
 #lambda node: ROOT.NodeCaster(node.__cppname__).Cast(node)
-	fu=(lambda rdf: getattr(ROOT,name+"_nail")(CastToRNode(rdf),nthreads) )
-	fu.produces=printed
-	return fu
+        fu = (lambda rdf: getattr(ROOT, name+"_nail")
+              (CastToRNode(rdf), nthreads))
+        fu.produces = printed
+        return fu
 
-    def Describe(self,name):
-	desc="## Description of variables: %s\n"%name
-	oi=[]
-	nodes=list(self.allNodesTo(name))+name
-        for node in [x for x in self.validCols if x in nodes] : #keep meaningful sorting
-	   if node in self.code :
-		 desc+="##########\n%s := %s # %s\n"%(node,self.code[node],self.checksum(node))
-	   else :
-	     oi.append(node)
-	desc+="\n\n#Used inputs: %s"%set(oi)
-	return desc  
-
-
+    def Describe(self, name):
+        desc = "## Description of variables: %s\n" % name
+        oi = []
+        nodes = list(self.allNodesTo(name))+name
+        for node in [x for x in self.validCols if x in nodes]:  # keep meaningful sorting
+            if node in self.code:
+                desc += "##########\n%s := %s # %s\n" % (
+                    node, self.code[node], self.checksum(node))
+            else:
+                oi.append(node)
+        desc += "\n\n#Used inputs: %s" % set(oi)
+        return desc
 
     def recursiveGetWeights(self, sel):
         #	print "Weights for",sel
@@ -510,15 +519,15 @@ class SampleProcessing:
         res = set(self.centralWeights[""])
 #	print sel,self.centralWeights,(sel in self.centralWeights)
         if sel in self.centralWeights:
-#	    print "res ce was",res
-#	    print "res ce up",self.centralWeights[sel]
+            #	    print "res ce was",res
+            #	    print "res ce up",self.centralWeights[sel]
             res.update(self.centralWeights[sel])
 #	    print "res ce is",res
         for dep in self.Requirements(sel):
-	    rec=self.recursiveGetWeights(dep)
+            rec = self.recursiveGetWeights(dep)
 #	    print "res was",res
 #	    print "res up",rec
-            res.update(rec) #self.recursiveGetWeights(dep))
+            res.update(rec)  # self.recursiveGetWeights(dep))
 #	    print "res is",res
 #	print res
         return res
@@ -536,7 +545,7 @@ class SampleProcessing:
             return list(weights)+[variation]
         res = []
         for w in weights:
-	      
+
             if w == v["replacing"] and v["filter"](selname, variation, hist):
                 res.append(variation)
             else:
@@ -545,18 +554,18 @@ class SampleProcessing:
 
     def defineWeights(self, selectionsSets):
         res = []
-        for name, selections in selectionsSets.iteritems():
+        for name, selections in selectionsSets.items():
             #    name=selSetName(selections)
-            print "define weight", name, selections
+            print("define weight", name, selections)
             weights = set()
             if name == "" and "" in self.centralWeights:
                 weights.update(self.centralWeights[""])
-	    if name in self.centralWeights :
-	        weights.update(self.centralWeights[name])
+            if name in self.centralWeights:
+                weights.update(self.centralWeights[name])
             for s in selections:
                 weights.update(self.recursiveGetWeights(s))
-            print weights
-            for variation in ["Central"]+self.variationWeights.keys():
+            print(weights)
+            for variation in ["Central"]+list(self.variationWeights.keys()):
                 replacedWeights = weights
                 same = False
                 if variation != "Central":
@@ -567,7 +576,8 @@ class SampleProcessing:
                     if not replacedWeights:
                         self.Define("%sWeight__%s" % (name, variation), "1.")
                     else:
-			print "DEFINE:","%sWeight__%s" %   (name, variation), "*".join(replacedWeights)
+                        print("DEFINE:", "%sWeight__%s" %
+                              (name, variation), "*".join(replacedWeights))
                         self.Define("%sWeight__%s" %
                                     (name, variation), "*".join(replacedWeights))
                     res.append("%sWeight__%s" % (name, variation))
@@ -601,94 +611,94 @@ class SampleProcessing:
             code = re.sub(s, r, code)
         return code
 
-   
-    def cppFunction(self,node,debug=False):
-	if node not in self.generatedCode :
-  	  if self.code[node] == "":
-	    return (None,None)
-	  inputs = "unsigned int __slot "
-          for i in self.Inputs(node):
-             if inputs != "":
-                      inputs += ", "
-             if i in self.dftypes:
-                inputs += "const %s & %s" % (
-                                 self.dftypes[i], i)
-             else:
-                inputs += "const %s & %s" % (
-                   self.dftypes[i[:i.rfind("__syst__")]], i)
-          debugcode = ""
-          if debug:
-            debugcode = 'std::cout << "%s" << std::endl;\n' % node
-	  if node not in self.dftypes :
-            autocppcode = "auto func__%s(%s) { %s return %s; }\n" % (
-                 node, inputs, debugcode, self.code[node])
-            self.dftypes[node] = returnType(autocppcode, "func__%s" % node)
+    def cppFunction(self, node, debug=False):
+        if node not in self.generatedCode:
+            if self.code[node] == "":
+                return (None, None)
+            inputs = "unsigned int __slot "
+            for i in self.Inputs(node):
+                if inputs != "":
+                    inputs += ", "
+                if i in self.dftypes:
+                    inputs += "const %s & %s" % (
+                        self.dftypes[i], i)
+                else:
+                    inputs += "const %s & %s" % (
+                        self.dftypes[i[:i.rfind("__syst__")]], i)
+            debugcode = ""
+            if debug:
+                debugcode = 'std::cout << "%s" << std::endl;\n' % node
+            if node not in self.dftypes:
+                autocppcode = "auto func__%s(%s) { %s return %s; }\n" % (
+                    node, inputs, debugcode, self.code[node])
+                self.dftypes[node] = returnType(autocppcode, "func__%s" % node)
 
-          cppcode = "%s func__%s(%s) { %s return %s; }\n" % (self.dftypes[node],
-                 node, inputs, debugcode, self.code[node])
-          hcode = "%s func__%s(%s);\n" % (self.dftypes[node], node, inputs)
-	  self.generatedCode[node]=(cppcode,hcode)
-	return self.generatedCode[node]
+            cppcode = "%s func__%s(%s) { %s return %s; }\n" % (self.dftypes[node],
+                                                               node, inputs, debugcode, self.code[node])
+            hcode = "%s func__%s(%s);\n" % (self.dftypes[node], node, inputs)
+            self.generatedCode[node] = (cppcode, hcode)
+        return self.generatedCode[node]
 
-    def funcName(self,node) :
-	return "func__%s"%(node if self.code[node] != "" else  self.originals[node])
+    def funcName(self, node):
+        return "func__%s" % (node if self.code[node] != "" else self.originals[node])
 
+    def checksum(self, node):
+        if node not in self.md5s:
+            res = md5("")
+            for i in self.Inputs(node):
+                res.update(self.checksum(i))
+            if node in self.inputTypes:
+                cpp = node  # FIXME use some meta data from file?
+                h = ""
+            else:
+                codeName = node if self.code[node] != "" else self.originals[node]
+                cpp, h = self.cppFunction(codeName)
+            res.update(cpp+h)
+            self.md5s[node] = res.hexdigest()
+        return self.md5s[node]
 
-    def checksum(self,node):
-	if node not in self.md5s:
-	   res=md5("")
-	   for i in  self.Inputs(node):
-	       res.update(self.checksum(i))
-	   if node in self.inputTypes :
-		cpp=node #FIXME use some meta data from file?
-		h=""
-	   else :
- 	        codeName=node if self.code[node] != "" else  self.originals[node]
-	        cpp,h = self.cppFunction(codeName)
-	   res.update(cpp+h)
-	   self.md5s[node]=res.hexdigest()  
-	return self.md5s[node]
-
-    def printRDFCpp(self, to=[], debug=False, outname="out.C", selections={}, snap=[], snapsel="",lib=False,libname="",nottoprint=[]):
-	printedhistos=[]
+    def printRDFCpp(self, to=[], debug=False, outname="out.C", selections={}, snap=[], snapsel="", lib=False, libname="", nottoprint=[]):
+        printedhistos = []
         histos = [x for y in selections for x in selections[y]]
-        to = list(set(to+histos+[x for x in selections.keys() if x!=""]))
+        to = list(
+            set(to+histos+[x for x in list(selections.keys()) if x != ""]))
         sels = {self.selSetName(self.Requirements(x)): self.sortedUniqueColumns(
             self.Requirements(x)) for x in to}
 #	print "Update with",{x:self.sortedUniqueColumns(self.Requirements(x)+[x]) for x in selections}
-        sels.update({x: self.sortedUniqueColumns( self.Requirements(x)+[x]) for x in selections if x != ""})
+        sels.update({x: self.sortedUniqueColumns(
+            self.Requirements(x)+[x]) for x in selections if x != ""})
 
 # AR###	selections.append("")
 
-	print "Sels are",sels
+        print("Sels are", sels)
         weights = self.defineWeights(sels)
-	print "Weights to print", weights
+        print("Weights to print", weights)
         f = open(outname, "w")
         ftxt = open(outname[:-2]+"-data.txt", "w")
         f.write(self.headerstring+self.additionalcpp)
-        toprint = set(selections.keys() +
+        toprint = set(list(selections.keys()) +
                       [x for t in to+weights for x in self.allNodesTo([t])])
-	toprint = [x for x in toprint if x not in nottoprint] 
+        toprint = [x for x in toprint if x not in nottoprint]
 #	print "toprint:",toprint
         cols = self.validCols  # if not optimizeFilters else orderedColumns
         for c in cols:
             if c in toprint:
                 #	    print '.... doing..',c
                 if c in self.obs or c in self.selections:
-	            cppcode,hcode = self.cppFunction(c,debug)
-		    if cppcode is not None :
+                    cppcode, hcode = self.cppFunction(c, debug)
+                    if cppcode is not None:
                         f.write(cppcode)
 
-        if lib :
-	   f.write('''
+        if lib:
+            f.write('''
 Result %s_nail(RNode rdf,int nThreads) {
      Result r;
      if(nThreads > 0)
      ROOT::EnableImplicitMT(nThreads);
 	
-	   '''%libname)
-	else:
-          f.write('''
+	   ''' % libname)
+        else:
+            f.write('''
 int main(int argc, char** argv)
 {
    auto n_cores = 0;
@@ -705,7 +715,7 @@ int main(int argc, char** argv)
 
 
 ''' % self.defFN)
-          f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
+            f.write('ROOT::RDataFrame rdf("Events",fname.c_str());\n')
         rdf = "rdf"
 #        if debug:
 #            rdf = "rdf.Range(1000)"
@@ -715,7 +725,7 @@ int main(int argc, char** argv)
             if c in toprint:
                 if c in self.obs or c in self.selections:
                     f.write('%s.DefineSlot("%s",%s,{%s})\n' % (
-                            rdf, c, self.funcName(c) , ",".join(['"%s"' % x for x in self.Inputs(c)])))
+                            rdf, c, self.funcName(c), ",".join(['"%s"' % x for x in self.Inputs(c)])))
 
                     rdf = "rdf%s" % i
                     i += 1
@@ -732,7 +742,7 @@ int main(int argc, char** argv)
         selsprinted = []
         selname = ""
         f.write("{")
-        for s in selections.keys():
+        for s in list(selections.keys()):
             for t in selections[s]:
                 #        for t in to :
                 #	    if t in self.histos:
@@ -747,7 +757,8 @@ int main(int argc, char** argv)
                     missing = [x for x in self.Requirements(
                         t) if x not in self.Requirements(s)+[s]]
                     if missing:
-                        print "Cannot make ", t, " in ", s, " because the following selections are needed", missing
+                        print("Cannot make ", t, " in ", s,
+                              " because the following selections are needed", missing)
                         continue
                     selname = s
                     sellist = self.Requirements(s)+[s]
@@ -762,8 +773,9 @@ int main(int argc, char** argv)
                         for ss in sellist[1:]:
                             f.write('.Filter("%s","%s")' % (ss, ss))
                         f.write(";\n")
-			if lib:
-                            f.write('r.rdf.emplace("%s",selection_%s);\n'%(selname,selname))
+                        if lib:
+                            f.write('r.rdf.emplace("%s",selection_%s);\n' %
+                                    (selname, selname))
 
                         selsprinted.append(selname)
                         f.write("{")
@@ -775,26 +787,26 @@ int main(int argc, char** argv)
 
                 ftxt.write('%s,%s,%s,2000,0,2000,%s,%sWeight__Central\n' %
                            (rdf, t, t, t, selname))
-		binning="1000,0,1000"
-		for (r,b) in self.binningRules :
-		    if re.match(r,t) :
-			binning = b
-		hname="%s___%s"%(t, s)
-		if hname not in nottoprint :
-                  f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
-                    rdf, t, s, t, s, binning, t, selname))
-	  	  printedhistos.append(hname)
+                binning = "1000,0,1000"
+                for (r, b) in self.binningRules:
+                    if re.match(r, t):
+                        binning = b
+                hname = "%s___%s" % (t, s)
+                if hname not in nottoprint:
+                    f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
+                        rdf, t, s, t, s, binning, t, selname))
+                    printedhistos.append(hname)
                 #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                 for w in self.variationWeights:
                     if self.variationWeights[w]["filter"](selname, t, w):
-		      hname="%s___%s__syst__%s"%(t, s,w)
-		      if hname not in nottoprint :
-                        ww = "%sWeight__%s" % (selname, w)
-                        ftxt.write('%s,%s__syst__%s,%s,1000,0,100,%s,%s\n' % (
-                            rdf, t, w, t, t, ww))
-                        f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
-                            rdf, t, s, w, t, s, binning,  t, ww))
-			printedhistos.append(hname)
+                        hname = "%s___%s__syst__%s" % (t, s, w)
+                        if hname not in nottoprint:
+                            ww = "%sWeight__%s" % (selname, w)
+                            ftxt.write('%s,%s__syst__%s,%s,1000,0,100,%s,%s\n' % (
+                                rdf, t, w, t, t, ww))
+                            f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
+                                rdf, t, s, w, t, s, binning,  t, ww))
+                            printedhistos.append(hname)
 
         if snapsel == "":
             rdf = rdflast
@@ -809,22 +821,23 @@ int main(int argc, char** argv)
             missing = [x for x in self.Requirements(
                 t) if x not in self.Requirements(s)+[s]]
             if missing:
-                print "Removing ", t, " in ", s, " because the following selections are needed", missing
+                print("Removing ", t, " in ", s,
+                      " because the following selections are needed", missing)
 #		 f.write(".Define(\"%s__safe\",\"("%t+("&&".join(missing))+")?%s:%s()\")\n"%(t,self.dftypes[c]))
 #		snapProt.append(t+"__safe")
             else:
                 snapGood.append(t)
-	if lib :
-          #f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdf)
-          f.write(';\nr.rdf.emplace("",%s);\nr.histos=histos; return r;}'%rdf)
+        if lib:
+            #f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdf)
+            f.write(';\nr.rdf.emplace("",%s);\nr.histos=histos; return r;}' % rdf)
 #          f.write(';\n return std::pair<RNode,std::vector<int> >(%s,std::vector<int>());}'%rdflast)
 #	  f.write(';\n return %s;}'%rdflast)
-	else : 
-          f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;' % (
-            rdf, ",".join(['"%s"' % x for x in snapGood])))
+        else:
+            f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;' % (
+                rdf, ",".join(['"%s"' % x for x in snapGood])))
 #	f.write(';\nauto snap=%s.Snapshot("ot", (out+"Snap.root").c_str(),{%s})\n;'%(rdf,",".join(['"%s"'%x for x in snap])))
 
-          f.write('''
+            f.write('''
    auto fff=TFile::Open((out+"Histos.root").c_str(),"recreate");
    for(auto h : histos) h->Write();
    fff->Write();  
@@ -832,7 +845,7 @@ int main(int argc, char** argv)
    return 0;
 }
 ''')
-        return toprint+printedhistos       
+        return toprint+printedhistos
 #        for t in to :
 #	   if t in self.histos:
 #	  	print '%s->Write();'%(t)
@@ -918,23 +931,24 @@ int main(int argc, char** argv)
         #print  >> sys.stderr, "VarNodesTo:",nodesTo
         return [x for x in self.allNodesFromWithWhiteList([self.variations[name]["original"]], nodesTo) if x in nodesTo]
 
-    def createVariationBranch(self, name, target,varsuffix="__syst__"):
+    def createVariationBranch(self, name, target, varsuffix="__syst__"):
         #	 print >> sys.stderr, "Find affected"
-	
-	cenWeights=[]	
-	for t in target:
-	   if t in self.centralWeights :
-		cenWeights+=self.centralWeights[t]
 
-        affected = (self.findAffectedNodesForVariationOnTargets(name, target+cenWeights))
-	print "Affected nodes for ",name , target
-	print affected
+        cenWeights = []
+        for t in target:
+            if t in self.centralWeights:
+                cenWeights += self.centralWeights[t]
+
+        affected = (self.findAffectedNodesForVariationOnTargets(
+            name, target+cenWeights))
+        print("Affected nodes for ", name, target)
+        print(affected)
 #	 print >> sys.stderr, "Found affected\n", affected
         # keep original sorting
         affected.sort(key=lambda x: self.validCols.index(x))
         res = [y+varsuffix+name for y in affected if y in target]
         replacementTable = [(x, x+varsuffix+name) for x in affected]
-	print replacementTable
+        print(replacementTable)
         for x, x_syst in replacementTable:
             ncode = ""
             if self.dupcode:
@@ -978,25 +992,26 @@ int main(int argc, char** argv)
                         self.Selection(x_syst, ncode, requires=selections)
                         # FIXME: weights
                     else:
-			print "Defining", x_syst
+                        print("Defining", x_syst)
                         self.Selection(x_syst, ncode, original=x,
                                        inputs=replacedinputs, requires=selections)
                         if x in self.centralWeights:
-			    print "has central weights"
-			    print "Repdict:",repdict
+                            print("has central weights")
+                            print("Repdict:", repdict)
                             replacedweights = [
                                 (c if c not in repdict else repdict[c]) for c in self.centralWeights[x]]
                             self.centralWeights[x_syst] = replacedweights
 #	 print "Recomputing for",res
         return res
 
-
     def createSystematicBranches(self, systematics, selWithHistos):
         res = copy.deepcopy(selWithHistos)
         for syst in systematics:
-#            print "creating systematic", syst
-            selWithReqs={sel:self.sortedUniqueColumns(self.Requirements(sel)) for sel in selWithHistos}
-            weights = self.createVariationBranch(syst, self.defineWeights(selWithReqs))
+            #            print "creating systematic", syst
+            selWithReqs = {sel: self.sortedUniqueColumns(
+                self.Requirements(sel)) for sel in selWithHistos}
+            weights = self.createVariationBranch(
+                syst, self.defineWeights(selWithReqs))
 #	    print "sels are",selWithReqs
 #            print "created weights", weights
             for sel in selWithHistos:
@@ -1010,7 +1025,6 @@ int main(int argc, char** argv)
                                    "__syst__"+syst not in histos]  # copy.deepcopy(res[sel])
                 res[selKey] += histos
         return res
-
 
 
 class AnalysisYields:

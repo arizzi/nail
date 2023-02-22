@@ -8,11 +8,11 @@ histosPerSelection={"" : ["MET_pt","Jet_pt","SelJet_pt"]}
 flow.binningRules = [(".*_pt","100,0,500")]
 flow.printRDFCpp([],debug=False,outname="tmp.C",selections=histosPerSelection)
 import os
-print "code generated"
+print("code generated")
 os.system("g++  -fPIC -Wall -O3 tmp.C $(root-config --libs --cflags)  -o tmp")
-print "code compiled"
+print("code compiled")
 os.system("./tmp 4")
-print "code run"
+print("code run")
 
 
 

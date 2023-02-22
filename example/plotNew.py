@@ -124,7 +124,7 @@ def findSyst(hn,sy,f) :
     if h3 in allh:
 	 hnForSys[hn][sy]=h3
 	 return h3
-    print "none matching"
+    print("none matching")
     return ""
 
 def totevents(s):
@@ -142,7 +142,7 @@ def totevents(s):
 	    totev[s]+=hw.GetSumOfWeights()
 	    run.Project("hw","1","genEventCount")
 	    totevCount[s]+=hw.GetSumOfWeights()
-	    print totev[s]
+	    print(totev[s])
 #    print "returning",totev[s], "for",s
     return totev[s]
 
@@ -159,7 +159,7 @@ for group in data :
     for d in data[group] :
         f[d]=ROOT.TFile.Open("out/%sHistos.root"%d)
 
-histoNames=list(set([x.GetName() for y in f.keys() for x in f[y].GetListOfKeys() ]))
+histoNames=list(set([x.GetName() for y in list(f.keys()) for x in f[y].GetListOfKeys() ]))
 
 canvas={}
 datastack={}
@@ -229,7 +229,7 @@ def makeplot(hn):
 		  else :
                     datasumSyst[hn][sy].Add(h)
         else:
-	   print "Cannot open",d,hn
+	   print("Cannot open",d,hn)
 	   exit(1)
      myLegend.AddEntry(h,"data","P")
 #   print "Lumi tot", lumitot
@@ -268,7 +268,7 @@ def makeplot(hn):
                     histosumSyst[hn][sy].Add(h)
 	   histos[hn].Add(h)
         else:
-	   print "Cannot open",b,hn
+	   print("Cannot open",b,hn)
 	   exit(1)
      myLegend.AddEntry(h,gr,"f")
 
@@ -309,7 +309,7 @@ def makeplot(hn):
            histos[hn].Add(h)
            histoTH[hn].Add(h)               
         else:
-	   print "Cannot open",b,hn
+	   print("Cannot open",b,hn)
 	   exit(1)
      myLegend.AddEntry(h,gr,"f")            
                                             
@@ -326,14 +326,14 @@ def makeplot(hn):
    lastBlind=-1
    for i in range(histosSig[hn].GetStack().Last().GetNbinsX()) :
 	if histosSig[hn].GetStack().Last().GetBinContent(i) > 0.1*sqrt(abs(histos[hn].GetStack().Last().GetBinContent(i))) and histosSig[hn].GetStack().Last().GetBinContent(i)/(0.1+abs(histos[hn].GetStack().Last().GetBinContent(i))) > 0.05 :
-		print "to blind",hn,i,abs(histos[hn].GetStack().Last().GetBinContent(i)), histosSig[hn].GetStack().Last().GetBinContent(i)	
+		print("to blind",hn,i,abs(histos[hn].GetStack().Last().GetBinContent(i)), histosSig[hn].GetStack().Last().GetBinContent(i))	
 	        if i < firstBlind:
 		    firstBlind=i
                 lastBlind=i
    for i in range(firstBlind,lastBlind) :
        datastack[hn].GetStack().Last().SetBinContent(i,0)
        datasum[hn].SetBinContent(i,0)
-       print "blinded",i,hn
+       print("blinded",i,hn)
    myLegend.Draw() #NEW  
    canvas[hn].cd(1)
    histos[hn].SetTitle("") 
@@ -392,7 +392,7 @@ def makeplot(hn):
        #ratiosy[-1].SetLineStyle(j)
        ratiosy[-1].SetFillStyle(0)
        ratiosy[-1].Draw("same hist")
-       print "Heu",hn,sy,histosumSyst[hn][sy].Integral(),histosum[hn].Integral(),lumitot,ratiosy[-1]
+       print("Heu",hn,sy,histosumSyst[hn][sy].Integral(),histosum[hn].Integral(),lumitot,ratiosy[-1])
 #   systematics=[x for x in histoNames if x[:hn.find("___")]==hn[:hn.find("___")] and "__syst__" in x]
 #   print "available systematics",hn,systematics
 #  for s in systematics:
@@ -405,14 +405,14 @@ def makeplot(hn):
 
 
 his=[x for x in histoNames if "__syst__" not in x]
-print his[0]
+print(his[0])
 makeplot(his[0]) #do once for caching normalizations
 
-print "Preload"
+print("Preload")
 for ff in f:
    for h in histoNames :
      f[ff].Get(h)
-print "Preload-done"
+print("Preload-done")
 
 if True:
  from multiprocessing import Pool
@@ -427,4 +427,4 @@ tot=0
 for s in totevCount:
   tot+=totevSkim[s]
 
-print tot, "input events" 
+print(tot, "input events") 
