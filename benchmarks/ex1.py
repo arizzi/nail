@@ -5,11 +5,11 @@ flow=SampleProcessing("Just MET","root://eospublic.cern.ch//eos/root-eos/benchma
 histosPerSelection={"" : ["MET_pt"]}
 flow.printRDFCpp([],debug=False,outname="tmp.C",selections=histosPerSelection)
 import os
-print "code generated"
+print("code generated")
 os.system("g++  -fPIC -Wall -O3 tmp.C $(root-config --libs --cflags)  -o tmp")
-print "code compiled"
+print("code compiled")
 os.system("./tmp 4")
-print "code run"
+print("code run")
 
 
 
