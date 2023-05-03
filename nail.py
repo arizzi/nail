@@ -31,6 +31,7 @@ struct Result {
  std::map<std::string,RNode> rdf;
  ROOT::RDF::RResultPtr<TH1D> histo;
  std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;
+ std::map<std::string,std::vector<ROOT::RDF::RResultPtr<TH1D> > > histosOutSplit;
 };
 template <typename T>
 class NodeCaster {
@@ -483,7 +484,7 @@ class SampleProcessing:
             print("Compiling with: g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L. -I.  -lNailExternals " % (name, name)+flags)
             os.system("g++ -fPIC -Wall -O0 %s_autogen.C $(root-config --libs --cflags)  -o %s_autogen.so --shared -I..  -L.  -lNailExternals" % (name, name)+flags)
         ROOT.gInterpreter.Declare('''
-	Result %s_nail(RNode rdf, int nThreads);
+	Result %s_nail(RNode rdf, int nThreads,std::map<std::string,std::string> outSplit=std::map<std::string,std::string>());
 	''' % name)
         print("Setting nthreads", nthreads)
         if nthreads > 0:
@@ -492,10 +493,14 @@ class SampleProcessing:
         ''' % nthreads)
         print("Loading ", name+"_autogen.so")
         ROOT.gSystem.Load(name+"_autogen.so")
+        def convertToMap(adict): 
+            stdmap=ROOT.std.map('std::string','std::string')()
+            for x,y in adict.items() : stdmap[x]=y
+            return stdmap
         def CastToRNode(node): return ROOT.RDF.AsRNode(node)
 #lambda node: ROOT.NodeCaster(node.__cppname__).Cast(node)
-        fu = (lambda rdf: getattr(ROOT, name+"_nail")
-              (CastToRNode(rdf), nthreads))
+        fu = (lambda rdf,outSplit={}: getattr(ROOT, name+"_nail")
+              (CastToRNode(rdf), nthreads,convertToMap(outSplit)))
         fu.produces = printed
         return fu
 
@@ -691,12 +696,14 @@ class SampleProcessing:
 
         if lib:
             f.write('''
-Result %s_nail(RNode rdf,int nThreads) {
+
+std::vector<ROOT::RDF::RResultPtr<TH1D>> histosWithSelection_%s(std::map<std::string,RNode> &rdf, std::string sel="1");
+Result %s_nail(RNode rdf,int nThreads,std::map<std::string,std::string> outSplit=std::map<std::string,std::string>()) {
      Result r;
      if(nThreads > 0)
      ROOT::EnableImplicitMT(nThreads);
 	
-	   ''' % libname)
+	   ''' % (libname,libname))
         else:
             f.write('''
 int main(int argc, char** argv)
@@ -737,10 +744,12 @@ int main(int argc, char** argv)
         rdf = "rdf0"
         f.write("auto toplevel=%s;\n" % rdf)
         f.write("std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;\n")
+        f.write('r.rdf.emplace("",%s);\n' % rdf)
         # rdflast=rdf
         rdflast = "rdf0"
         selsprinted = []
         selname = ""
+        histostring=""
         f.write("{")
         for s in list(selections.keys()):
             for t in selections[s]:
@@ -793,9 +802,11 @@ int main(int argc, char** argv)
                         binning = b
                 hname = "%s___%s" % (t, s)
                 if hname not in nottoprint:
-                    f.write('histos.emplace_back(%s.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
-                        rdf, t, s, t, s, binning, t, selname))
+                    #f.write('histos.emplace_back(r.rdf.find("%s")->second.Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
+                    #    selname, t, s, t, s, binning, t, selname))
                     printedhistos.append(hname)
+                    histostring+=('histos.emplace_back(rdf.find("%s")->second.Filter(sel).Histo1D({"%s___%s", "%s {%s}", %s},"%s","%sWeight__Central"));\n' % (
+                        selname, t, s, t, s, binning, t, selname))
                 #f.write('histos.emplace_back(%s.Histo1D({"%s%s", "%s {%s}", 500, 0, 0},"%s","%sWeight__Central"));\n'%(rdf,t,s,t,s,t,selname))
                 for w in self.variationWeights:
                     if self.variationWeights[w]["filter"](selname, t, w):
@@ -804,8 +815,10 @@ int main(int argc, char** argv)
                             ww = "%sWeight__%s" % (selname, w)
                             ftxt.write('%s,%s__syst__%s,%s,1000,0,100,%s,%s\n' % (
                                 rdf, t, w, t, t, ww))
-                            f.write('histos.emplace_back(%s.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
-                                rdf, t, s, w, t, s, binning,  t, ww))
+                     #       f.write('histos.emplace_back(r.rdf.find("%s")->second.Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
+                      #          selname, t, s, w, t, s, binning,  t, ww))
+                            histostring+=('histos.emplace_back(rdf.find("%s")->second.Filter(sel).Histo1D({"%s___%s__syst__%s", "%s {%s}", %s},"%s","%s"));\n' % (
+                                selname, t, s, w, t, s, binning,  t, ww))
                             printedhistos.append(hname)
 
         if snapsel == "":
@@ -829,7 +842,17 @@ int main(int argc, char** argv)
                 snapGood.append(t)
         if lib:
             #f.write(';\n Result r(%s); r.histos=histos; return r;}'%rdf)
-            f.write(';\nr.rdf.emplace("",%s);\nr.histos=histos; return r;}' % rdf)
+#            f.write(';\nr.histos=histos; return r;}' )
+            f.write(''';\n
+            r.histos=histosWithSelection_%s(r.rdf); 
+            for( auto [ name, sel ]  : outSplit){
+                r.histosOutSplit[name]=histosWithSelection_%s(r.rdf,sel);
+            }
+            return r;}'''%(libname,libname))
+            #f.write('\n\nauto histosWithOutSelection(auto rdf, auto sel) {\n\n' )
+            f.write('\n\nstd::vector<ROOT::RDF::RResultPtr<TH1D>> histosWithSelection_%s(std::map<std::string,RNode> &rdf, std::string sel){\n\n'%libname)
+            f.write("std::vector<ROOT::RDF::RResultPtr<TH1D>> histos;\n")
+            f.write(histostring+'\n\nreturn histos; }' )
 #          f.write(';\n return std::pair<RNode,std::vector<int> >(%s,std::vector<int>());}'%rdflast)
 #	  f.write(';\n return %s;}'%rdflast)
         else:
