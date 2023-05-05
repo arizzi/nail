@@ -1,3 +1,13 @@
+# Quickstart
+```
+pip3 install libclang clang
+git clone git@github.com:arizzi/nail.git
+cd nail/
+git checkout py3
+source /cvmfs/sft.cern.ch/lcg/views/LCG_102/x86_64-centos7-gcc11-opt/setup.sh
+export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
+python3 simple.py
+```
 # Natual Analysis Implementation Language
 
 NAIL is an analysis language that should allow to define in an abstract way a data analsysis of a typical HEP experiment such as CMS or ATLAS.
