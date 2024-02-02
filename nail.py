@@ -228,34 +228,35 @@ class SampleProcessing:
                         (",".join([c+"_"+ac for c in collections])))
 
     def SubCollection(self, name, existing, sel="", requires=[], singleton=False):
-        if sel != "":
-            self.Define(name, sel, requires=requires)
-        else:
-            sel = name
+        mask="%s_%s_mask"%(existing,name)
+        if sel=="" :
+            sel=name
+#        mask=sel
+        self.Define(mask, sel, requires=requires)
         l = len(existing)
         additionalCols = [(name+c[l:], c)
                           for c in self.validCols if c[0:l+1] == existing+"_"]
         for (ac, oc) in additionalCols:
             if oc in self.inputTypes and self.inputTypes[oc] == 'Bool_t':
-                self.Define(ac, "At((1*%s),%s)" % (oc, name),
+                self.Define(ac, "At((1*%s),%s)" % (oc, mask),
                             requires=requires)  # FIX RDF BUG
             else:
-                self.Define(ac, "At(%s,%s)" % (oc, name), requires=requires)
+                self.Define(ac, "At(%s,%s)" % (oc, mask), requires=requires)
         if not singleton:
-            self.Define("n%s" % name, "Sum(%s)" % (name), requires=requires)
+            self.Define("n%s" % name, "Sum(%s)" % (mask), requires=requires)
 
     def SubCollectionFromIndices(self, name, existing, sel="", requires=[]):
-        if sel != "":
-            self.Define(name, sel)
-        else:
+        if sel=="" :
             sel = name
+        indices=sel
+#        self.Define(indices, sel)
         l = len(existing)
         additionalCols = [(name+c[l:], c)
                           for c in self.validCols if c[0:l+1] == existing+"_"]
         for (ac, oc) in additionalCols:
-            self.Define(ac, "Take(%s,%s)" % (oc, name), requires=requires)
+            self.Define(ac, "Take(%s,%s)" % (oc, indices), requires=requires)
         # FIXME: cast to unsigned due to ROOT problem with uint leaf
-        self.Define("n%s" % name, "int(%s.size())" % (name), requires=requires)
+        self.Define("n%s" % name, "int(%s.size())" % (indices), requires=requires)
 
     def ObjectAt(self, name, existing, index="", requires=[]):
         self.SubCollection(name, existing, index, requires, True)
@@ -265,39 +266,27 @@ class SampleProcessing:
             # need proper Combinations or Distinct function in RDF
             print("Not implemented n=", n)
             exit(1)
-
-        if collection not in self.validCols:
-            if "n%s" % collection in self.validCols:
+        
+#      if collection not in self.validCols:
+        if "n%s" % collection in self.validCols:
                 self.Define(collection, "ROOT::VecOps::RVec<unsigned int>(n%s,true)" %
                             collection, requires=requires)
-            else:
+        else:
                 print("Cannot find collection", collection)
                 return
+        self.Define(name+"_indices", "ROOT::VecOps::Combinations(ROOT::VecOps::RVec<unsigned int>(n%s,true),%s)" % (collection,n),
+                   requires=requires)
 
-        if n == 2:
-            self.Define("%s_allpairs" % name, "Combinations(Nonzero(%s),Nonzero(%s))" % (
-                collection, collection), requires=requires)
-            self.Define(name, "At(%s_allpairs,0) < At(%s_allpairs,1)" %
-                        (name, name), requires=requires)
-        else:
-            self.Define("%s_allpairs" % name, "Combinations(n%s,n%s,n%s)" % (
-                collection, collection, collection), requires=requires)
-            self.Define(name, "At(%s_allpairs,0) < At(%s_allpairs,1) && At(%s_allpairs,1) < At(%s_allpairs,2)  " %
-                        (name, name, name, name), requires=requires)
-
-        self.Define("%s0" % name, "At(At(%s_allpairs,0),%s)" %
-                    (name, name), requires=requires)
-        self.Define("%s1" % name, "At(At(%s_allpairs,1),%s)" %
-                    (name, name), requires=requires)
+        self.Define("%s0_indices" % name, "At(%s_indices,0)" % name, requires=requires)
+        self.Define("%s1_indices" % name, "At(%s_indices,1)" % name, requires=requires)
         self.SubCollectionFromIndices(
-            "%s0" % name, collection, requires=requires)
+            "%s0" % name, collection, sel= "%s0_indices" % name, requires=requires)
         self.SubCollectionFromIndices(
-            "%s1" % name, collection, requires=requires)
+            "%s1" % name, collection, sel= "%s1_indices" % name, requires=requires)
         if n == 3:
-            self.Define("%s2" % name, "At(At(%s_allpairs,2),%s)" %
-                        (name, name), requires=requires)
+            self.Define("%s2_indices" % name, "At(%s_allpairs,2)" %name, requires=requires)
             self.SubCollectionFromIndices(
-                "%s2" % name, collection, requires=requires)
+                "%s2" % name, collection, sel= "%s2_indices" % name , requires=requires)
 
     def TakePair(self, name, existing, pairs, index, requires=[], ind=[0, 1]):
         self.Define("%s_index" % (name), index, requires=requires)
