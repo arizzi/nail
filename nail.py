@@ -269,8 +269,9 @@ class SampleProcessing:
         
 #      if collection not in self.validCols:
         if "n%s" % collection in self.validCols:
-                self.Define(collection, "ROOT::VecOps::RVec<unsigned int>(n%s,true)" %
-                            collection, requires=requires)
+            pass
+#               self.Define(collection, "ROOT::VecOps::RVec<unsigned int>(n%s,true)" %
+#                           collection, requires=requires)
         else:
                 print("Cannot find collection", collection)
                 return
@@ -284,7 +285,7 @@ class SampleProcessing:
         self.SubCollectionFromIndices(
             "%s1" % name, collection, sel= "%s1_indices" % name, requires=requires)
         if n == 3:
-            self.Define("%s2_indices" % name, "At(%s_allpairs,2)" %name, requires=requires)
+            self.Define("%s2_indices" % name, "At(%s_indices,2)" %name, requires=requires)
             self.SubCollectionFromIndices(
                 "%s2" % name, collection, sel= "%s2_indices" % name , requires=requires)
 
